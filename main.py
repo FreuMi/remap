@@ -98,7 +98,89 @@ def isLiteral(value: str) -> bool:
     else: 
         return False
 
-#def isDuplicateGraph(graph, all_graphs):
+def getPath(graph: Graph) -> str:
+    for s,p,o in graph:
+        if str(p) == "http://w3id.org/rml/path":
+            return str(o)   
+
+def getSubject(graph: Graph) -> tuple[str,str]:
+    subjectMap = ""
+    for s,p,o in graph:
+        if str(p) == "http://w3id.org/rml/subjectMap":
+            subjectMap = str(o)
+            break
+    for s,p,o in graph:
+        if str(s) == subjectMap:
+            if str(p) == "http://w3id.org/rml/constant":
+                return str(o), "constant"
+            elif str(p) == "http://w3id.org/rml/reference":
+                return str(o), "reference"
+            elif str(p) == "http://w3id.org/rml/template":
+                return str(o), "template"
+            
+    print("Error in getSubject")
+    sys.exit(1)
+            
+def getPredicate(graph: Graph) -> tuple[str,str]:
+    predicateMap = ""
+    for s,p,o in graph:
+        if str(p) == "http://w3id.org/rml/predicateMap":
+            predicateMap = str(o)
+            break
+    
+    for s,p,o in graph:
+        if str(s) == predicateMap:
+            if str(p) == "http://w3id.org/rml/constant":
+                return str(o), "constant"
+            elif str(p) == "http://w3id.org/rml/reference":
+                return str(o), "reference"
+            elif str(p) == "http://w3id.org/rml/template":
+                return str(o), "template"
+    
+    print("Error in getPredicate")
+    sys.exit(1)
+            
+def getObject(graph: Graph) -> tuple[str,str]:
+    objectMap = ""
+    for s,p,o in graph:
+        if str(p) == "http://w3id.org/rml/objectMap":
+            objectMap = str(o)
+            break
+    print(objectMap)
+    for s,p,o in graph:
+        print(s,p,o)
+        if str(s) == objectMap:
+            if str(p) == "http://w3id.org/rml/constant":
+                return str(o), "constant"
+            elif str(p) == "http://w3id.org/rml/reference":
+                return str(o), "reference"
+            elif str(p) == "http://w3id.org/rml/template":
+                return str(o), "template"
+    print("Error in getObject")
+    sys.exit(1)
+
+def extract_information(graph: Graph) -> tuple[str,str,str,str,str,str,str]:
+    # Get source path 
+    new_path = getPath(graph)
+    # Get subject
+    sub, subject_type = getSubject(graph)
+    # Get predicate
+    pred, predicate_type = getPredicate(graph)
+    # Get object
+    obj, object_type = getObject(graph)
+
+    return (new_path, sub, subject_type, pred, predicate_type, obj, object_type)
+
+def isDuplicateGraph(graph: Graph, all_graphs: list[Graph]) -> bool:
+    reference_info = extract_information(graph)
+
+    for stored_graph in all_graphs:
+        # Check if source, subject, predicate, and object are the same.
+        stored_information = extract_information(stored_graph)
+        if reference_info == stored_information:
+            return True
+
+    return False
 
 def main():
     # Config
@@ -155,15 +237,19 @@ def main():
                 # clean o value
                 o = clean_entry(o)
                 o_term_map, o_term_map_type = get_term_map_type(o, key, value)
-
                 
                 ## Build rml graph ##
                 rml_sub_graph = graph_builder.build_sub_graph(file_path_csv, s_term_map, s_term_map_type, s_term_type, p_term_map, p_term_map_type, p_term_type, o_term_map, o_term_map_type, o_term_type)
-
-                rml_sub_graphs.append(rml_sub_graph)
+                
+                if not isDuplicateGraph(rml_sub_graph, rml_sub_graphs):
+                    rml_sub_graphs.append(rml_sub_graph)
+                else:
+                    print("DUPLICATE")
 
     # Print output
+    result_graph = Graph()
     for rml_sub_graph in rml_sub_graphs:
-        print(rml_sub_graph.serialize(format="turtle"))
+        result_graph += rml_sub_graph
+    print(result_graph.serialize(format="turtle"))
 
 main()
