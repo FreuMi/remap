@@ -1,5 +1,5 @@
 import pandas as pd
-from rdflib import Graph, URIRef, Literal, BNode
+from rdflib import Graph, Namespace
 import sys
 from dataclasses import dataclass
 import graph_builder
@@ -211,13 +211,12 @@ def isDuplicateGraph(graph: Graph, all_graphs: list[Graph]) -> bool:
 
 def main():
     # Config
-    file_path_csv = 'student.csv'
+    file_path_csv = 'ious.csv'
     file_path_rdf = 'output.nq'
     print("Starting...")
 
     # Load csv data
     data: pd.DataFrame = pd.read_csv(file_path_csv, dtype=str)
-    print(data)
     # Load RDF data
     rdf_data = parse(file_path_rdf)
     rml_sub_graphs = []
@@ -242,15 +241,17 @@ def main():
             # clean s value
             s = clean_entry(s)
             # Iterate over all elements in the row and detect type
+            s_term_map = s
             for key, value in row.items():
-                term_map, term_map_type = get_term_map_type(s, key, value)
+                term_map, term_map_type = get_term_map_type(s_term_map, key, value)
                 if s_term_map_type == "":
                     s_term_map = term_map
                     s_term_map_type = term_map_type
                 elif term_map_type != "constant":
                     s_term_map = term_map
                     s_term_map_type = term_map_type
-
+                print()
+                
             ## Handle predicate ##
             p_term_type = get_term_type(p)
             p_term_map = ""
@@ -258,9 +259,9 @@ def main():
 
             # clean p value
             p = clean_entry(p)
-
+            p_term_map = p
             for key, value in row.items():
-                term_map, term_map_type = get_term_map_type(p, key, value)
+                term_map, term_map_type = get_term_map_type(p_term_map, key, value)
                 if p_term_map_type == "":
                     p_term_map = term_map
                     p_term_map_type = term_map_type
@@ -275,8 +276,9 @@ def main():
 
             # clean o value
             o = clean_entry(o)
+            o_term_map = o
             for key, value in row.items():
-                term_map, term_map_type = get_term_map_type(o, key, value)
+                term_map, term_map_type = get_term_map_type(o_term_map, key, value)
                 if o_term_map_type == "":
                     o_term_map = term_map
                     o_term_map_type = term_map_type
@@ -294,6 +296,9 @@ def main():
 
     # Print output
     result_graph = Graph()
+    # Set RML namespace
+    RML = Namespace("http://w3id.org/rml/")
+    result_graph.bind("rml", RML)
     for rml_sub_graph in rml_sub_graphs:
         result_graph += rml_sub_graph
     print(result_graph.serialize(format="turtle"))
