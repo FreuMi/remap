@@ -54,6 +54,36 @@ def get_term_type(data: str) -> str:
     return res
 
 
+def tokenizer(input_val: str) -> list[str]:
+    result = []
+    in_quotation = False
+    word = ""
+    
+    for char in input_val:
+        if char == "\"":
+            # Toggle the in_quotation flag
+            in_quotation = not in_quotation
+            word += char 
+        elif char == " ":
+            if in_quotation:
+                # Inside quotes, spaces are part of the word
+                word += char
+            else:
+                # Outside quotes, space marks the end of a word
+                if word:
+                    result.append(word)
+                    word = ""
+        else:
+            # Add other characters to the current word
+            word += char
+    
+    # Append the last word if it exists
+    if word:
+        result.append(word)
+    
+    return result
+
+
 
 # funciton to parse rdf data in nquads
 def parse(path: str) -> list[Quad]:
@@ -61,7 +91,7 @@ def parse(path: str) -> list[Quad]:
     # Load file
     with open(path, 'r') as f:
         for line in f:
-            line_parts = line.split(" ")
+            line_parts = tokenizer(line)
             # Hanlde without graph
             if len(line_parts) == 4:
                 x = Quad(line_parts[0], line_parts[1], line_parts[2], "")
@@ -183,10 +213,11 @@ def main():
     # Config
     file_path_csv = 'student.csv'
     file_path_rdf = 'output.nq'
+    print("Starting...")
 
     # Load csv data
     data: pd.DataFrame = pd.read_csv(file_path_csv, dtype=str)
-
+    print(data)
     # Load RDF data
     rdf_data = parse(file_path_rdf)
     rml_sub_graphs = []
@@ -210,7 +241,6 @@ def main():
             
             # clean s value
             s = clean_entry(s)
-
             # Iterate over all elements in the row and detect type
             for key, value in row.items():
                 term_map, term_map_type = get_term_map_type(s, key, value)
