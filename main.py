@@ -15,7 +15,7 @@ class Quad:
 # Itentify term_map_type of (constant, reference, template) and generate term_map
 def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str) -> tuple[str, str]:
     rdf_term_map_type = ""
-    if rdf_term not in csv_data:
+    if csv_data not in rdf_term:
         rdf_term_map_type = "constant"
     else:
         csv_data = csv_data.replace(rdf_term, "")
@@ -26,7 +26,6 @@ def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str) -> tuple[st
         else:
             print("Error detecting term_map_type! Found:", rdf_term_map_type)
             sys.exit(1)
-    
     term_map = ""
     if rdf_term_map_type == "constant":
         term_map = rdf_term
@@ -195,52 +194,73 @@ def main():
     # Iterate over all csv data
     for row in data.itertuples(index=False):
         row: dict[str, str] = row._asdict() 
-        # Iterate over all elements in the row
-        for key, value in row.items():
-            # Iterate over the graph
-            for element in rdf_data:
-                # Access data
-                s = element.s
-                p = element.p
-                o = element.o
-                g = element.g
+        
+        # Iterate over the graph
+        for element in rdf_data:
+            # Access data
+            s = element.s
+            p = element.p
+            o = element.o
+            g = element.g
 
-                ## Handle subject ##
-                s_term_type = get_term_type(s)
-                s_term_map = ""
-                s_term_map_type = ""
-                
-                # clean s value
-                s = clean_entry(s)
+            ## Handle subject ##
+            s_term_type = get_term_type(s)
+            s_term_map = ""
+            s_term_map_type = ""
+            
+            # clean s value
+            s = clean_entry(s)
 
-                s_term_map, s_term_map_type = get_term_map_type(s, key, value)
-                
-                ## Handle predicate ##
-                p_term_type = get_term_type(p)
-                p_term_map = ""
-                p_term_map_type = ""
+            # Iterate over all elements in the row and detect type
+            for key, value in row.items():
+                term_map, term_map_type = get_term_map_type(s, key, value)
+                if s_term_map_type == "":
+                    s_term_map = term_map
+                    s_term_map_type = term_map_type
+                elif term_map_type != "constant":
+                    s_term_map = term_map
+                    s_term_map_type = term_map_type
 
-                # clean p value
-                p = clean_entry(p)
+            ## Handle predicate ##
+            p_term_type = get_term_type(p)
+            p_term_map = ""
+            p_term_map_type = ""
 
-                p_term_map, p_term_map_type = get_term_map_type(p, key, value)
+            # clean p value
+            p = clean_entry(p)
 
-                ## Handle object ##
-                o_term_type = get_term_type(o)
-                o_term_map = ""
-                o_term_map_type = ""
+            for key, value in row.items():
+                term_map, term_map_type = get_term_map_type(p, key, value)
+                if p_term_map_type == "":
+                    p_term_map = term_map
+                    p_term_map_type = term_map_type
+                elif term_map_type != "constant":
+                    p_term_map = term_map
+                    p_term_map_type = term_map_type
 
-                # clean o value
-                o = clean_entry(o)
-                o_term_map, o_term_map_type = get_term_map_type(o, key, value)
-                
-                ## Build rml graph ##
-                rml_sub_graph = graph_builder.build_sub_graph(file_path_csv, s_term_map, s_term_map_type, s_term_type, p_term_map, p_term_map_type, p_term_type, o_term_map, o_term_map_type, o_term_type)
-                
-                if not isDuplicateGraph(rml_sub_graph, rml_sub_graphs):
-                    rml_sub_graphs.append(rml_sub_graph)
-                else:
-                    print("DUPLICATE")
+            ## Handle object ##
+            o_term_type = get_term_type(o)
+            o_term_map = ""
+            o_term_map_type = ""
+
+            # clean o value
+            o = clean_entry(o)
+            for key, value in row.items():
+                term_map, term_map_type = get_term_map_type(o, key, value)
+                if o_term_map_type == "":
+                    o_term_map = term_map
+                    o_term_map_type = term_map_type
+                elif term_map_type != "constant":
+                    o_term_map = term_map
+                    o_term_map_type = term_map_type
+            
+            ## Build rml graph ##
+            rml_sub_graph = graph_builder.build_sub_graph(file_path_csv, s_term_map, s_term_map_type, s_term_type, p_term_map, p_term_map_type, p_term_type, o_term_map, o_term_map_type, o_term_type)
+            
+            if not isDuplicateGraph(rml_sub_graph, rml_sub_graphs):
+                rml_sub_graphs.append(rml_sub_graph)
+            else:
+                print("DUPLICATE")
 
     # Print output
     result_graph = Graph()
