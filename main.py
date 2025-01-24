@@ -146,9 +146,7 @@ def getObject(graph: Graph) -> tuple[str,str]:
         if str(p) == "http://w3id.org/rml/objectMap":
             objectMap = str(o)
             break
-    print(objectMap)
     for s,p,o in graph:
-        print(s,p,o)
         if str(s) == objectMap:
             if str(p) == "http://w3id.org/rml/constant":
                 return str(o), "constant"
@@ -192,7 +190,6 @@ def main():
 
     # Load RDF data
     rdf_data = parse(file_path_rdf)
-
     rml_sub_graphs = []
 
     # Iterate over all csv data
@@ -217,7 +214,6 @@ def main():
                 s = clean_entry(s)
 
                 s_term_map, s_term_map_type = get_term_map_type(s, key, value)
-
                 
                 ## Handle predicate ##
                 p_term_type = get_term_type(p)
