@@ -96,7 +96,11 @@ def parse(path: str) -> list[Quad]:
             if len(line_parts) == 4:
                 x = Quad(line_parts[0], line_parts[1], line_parts[2], "")
                 rdf_data.append(x)
-
+            elif len(line_parts) == 5:
+                x = Quad(line_parts[0], line_parts[1], line_parts[2], line_parts[3])
+                rdf_data.append(x)
+            else:
+                print("Error parsing data. Found:", line_parts)
     return rdf_data
 
 # Remove < >, " ", _: from string 
@@ -108,6 +112,9 @@ def clean_entry(entry: str) -> str:
 
 # Check if entry is an URI
 def isURI(value: str) -> bool:
+    if value == "":
+        return False
+
     if value[0] == "<" and value[-1] == ">":
         return True
     else: 
@@ -115,6 +122,9 @@ def isURI(value: str) -> bool:
 
 # Check if entry is a URI
 def isBlanknode(value: str) -> bool:
+    if value == "":
+        return False
+    
     if value[0] == "_" and value[1] == ":":
         return True
     else:
@@ -122,6 +132,9 @@ def isBlanknode(value: str) -> bool:
 
 # Check if entry is literal
 def isLiteral(value: str) -> bool:
+    if value == "":
+        return False
+    
     if value[0] == "\"" and value[-1] == "\"":
         return True
     else: 
@@ -209,9 +222,12 @@ def isDuplicateGraph(graph: Graph, all_graphs: list[Graph]) -> bool:
 
     return False
 
+def isGeneratedByOtherGraph():
+    pass
+
 def main():
     # Config
-    file_path_csv = 'ious.csv'
+    file_path_csv = 'student.csv'
     file_path_rdf = 'output.nq'
     print("Starting...")
 
@@ -250,7 +266,6 @@ def main():
                 elif term_map_type != "constant":
                     s_term_map = term_map
                     s_term_map_type = term_map_type
-                print()
                 
             ## Handle predicate ##
             p_term_type = get_term_type(p)
@@ -285,11 +300,35 @@ def main():
                 elif term_map_type != "constant":
                     o_term_map = term_map
                     o_term_map_type = term_map_type
+
+            ## Handle graph ##
+            g_term_type = "iri"
+            g_term_map = ""
+            g_term_map_type = ""
+
+            # clean o value
+            g = clean_entry(g)
+            
+            if g == None:
+                g_term_type = ""
+                g_term_map = ""
+                g_term_map_type = ""
+            else:
+                g_term_map = g
+                for key, value in row.items():
+                    term_map, term_map_type = get_term_map_type(g_term_map, key, value)
+                    if g_term_map_type == "":
+                        g_term_map = term_map
+                        g_term_map_type = term_map_type
+                    elif term_map_type != "constant":
+                        g_term_map = term_map
+                        g_term_map_type = term_map_type
             
             ## Build rml graph ##
-            rml_sub_graph = graph_builder.build_sub_graph(file_path_csv, s_term_map, s_term_map_type, s_term_type, p_term_map, p_term_map_type, p_term_type, o_term_map, o_term_map_type, o_term_type)
+            rml_sub_graph = graph_builder.build_sub_graph(file_path_csv, s_term_map, s_term_map_type, s_term_type, p_term_map, p_term_map_type, p_term_type, o_term_map, o_term_map_type, o_term_type, g_term_type, g_term_map, g_term_map_type)
             
             if not isDuplicateGraph(rml_sub_graph, rml_sub_graphs):
+
                 rml_sub_graphs.append(rml_sub_graph)
             else:
                 print("DUPLICATE")

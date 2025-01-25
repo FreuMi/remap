@@ -35,7 +35,7 @@ def add_logical_source(g: Graph, tm_name: str, path: str) -> None:
     g.add((bn2, voc.MAPPING_PATH, Literal(path)))
 
 # Add subject information
-def add_subject(g: Graph, tm_name: str, term_map: str, term_map_type: str, term_type: str) -> None:
+def add_subject(g: Graph, tm_name: str, term_map: str, term_map_type: str, term_type: str, g_term_type: str, g_term_map: str, g_term_map_type: str) -> None:
     bn1 = BNode()
 
     g.add((URIRef(tm_name), voc.SUBJECT_MAP, bn1))
@@ -61,6 +61,25 @@ def add_subject(g: Graph, tm_name: str, term_map: str, term_map_type: str, term_
     else:
         print("Error: Subject term_type unsupported!")
         sys.exit(1)
+
+    ## Add graph if needed
+    if g_term_type == "":
+        return
+    
+    # Add graph map
+    bn2 = BNode()
+    g.add((bn1, voc.GRAPH_MAP, bn2))
+
+    if g_term_map_type == "template":
+        g.add((bn2, voc.TEMPLATE, Literal(g_term_map)))
+    elif g_term_map_type == "reference":
+        g.add((bn2, voc.REFERENCE, Literal(g_term_map)))
+    elif g_term_map_type == "constant":
+        g.add((bn2, voc.CONSTANT, Literal(g_term_map)))
+    else:
+        print("Error: Subject term_map_type unsupported! Found", term_map_type)
+        sys.exit(1)
+
         
 # Add a POM
 def add_predicate_object_map(g: Graph, tm_name: str, p_term_map: str, p_term_map_type: str, p_term_type: str, o_term_map: str, o_term_map_type: str, o_term_type: str) -> None:
@@ -111,7 +130,7 @@ def add_predicate_object_map(g: Graph, tm_name: str, p_term_map: str, p_term_map
         sys.exit(1)
 
 
-def build_sub_graph(file_path_csv: str, s_term_map: str, s_term_map_type: str, s_term_type: str, p_term_map: str, p_term_map_type: str, p_term_type: str, o_term_map: str, o_term_map_type: str, o_term_type: str) -> Graph:
+def build_sub_graph(file_path_csv: str, s_term_map: str, s_term_map_type: str, s_term_type: str, p_term_map: str, p_term_map_type: str, p_term_type: str, o_term_map: str, o_term_map_type: str, o_term_type: str, g_term_type: str, g_term_map: str, g_term_map_type: str) -> Graph:
     rml_sub_graph = Graph()
 
     # Set RML namespace
@@ -120,7 +139,7 @@ def build_sub_graph(file_path_csv: str, s_term_map: str, s_term_map_type: str, s
     
     tm = init_template(rml_sub_graph)
     add_logical_source(rml_sub_graph, tm, file_path_csv)
-    add_subject(rml_sub_graph, tm, s_term_map, s_term_map_type, s_term_type)
+    add_subject(rml_sub_graph, tm, s_term_map, s_term_map_type, s_term_type, g_term_type, g_term_map, g_term_map_type)
     add_predicate_object_map(rml_sub_graph, tm, p_term_map, p_term_map_type, p_term_type, o_term_map, o_term_map_type, o_term_type)
 
     return rml_sub_graph

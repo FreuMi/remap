@@ -21,6 +21,8 @@ TERM_TYPE = URIRef("http://w3id.org/rml/termType")
 POM = URIRef("http://w3id.org/rml/predicateObjectMap")
 PREDICATE_MAP = URIRef("http://w3id.org/rml/predicateMap")
 OBJECT_MAP = URIRef("http://w3id.org/rml/objectMap")
+GRAPH_MAP = URIRef("http://w3id.org/rml/graphMap")
+
 
 IRI = URIRef("http://w3id.org/rml/IRI")
 BLANKNODE = URIRef("http://w3id.org/rml/BlankNode")
