@@ -16,13 +16,13 @@ RMLTC0007c-CSV: ok
 RMLTC0007d-CSV: ok
 RMLTC0007e-CSV: ok
 RMLTC0007f-CSV: ok
-RMLTC0007g-CSV: ok (rml:defaultGraph not reversable)
+RMLTC0007g-CSV: ok (rml:defaultGraph not reversible)
 RMLTC0007h-CSV: not applicable
 RMLTC0008a-CSV: ok
-RMLTC0008b-CSV:
-RMLTC0008c-CSV:
-RMLTC0009a-CSV:
-RMLTC0009b-CSV:
+RMLTC0008b-CSV: ok (ReferenceObjectMap not reversible)
+RMLTC0008c-CSV: ok
+RMLTC0009a-CSV: TODO: Join
+RMLTC0009b-CSV: TODO: Join
 RMLTC0010a-CSV:
 RMLTC0010b-CSV:
 RMLTC0010c-CSV:
