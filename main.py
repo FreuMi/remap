@@ -3,6 +3,7 @@ from rdflib import Graph, Namespace
 import sys
 from dataclasses import dataclass
 import graph_builder
+import re
 
 # Class to store quad data
 @dataclass
@@ -84,6 +85,30 @@ def tokenizer(input_val: str) -> list[str]:
     return result
 
 
+def decode_safe_iri(safe_iri: str) -> str:
+    # Reverse lookup table for decoding
+    decode_map = {
+        "%20": " ", "%21": "!", "%22": "\"", "%23": "#", "%24": "$",
+        "%25": "%", "%26": "&", "%27": "'", "%28": "(", "%29": ")",
+        "%2A": "*", "%2B": "+", "%2C": ",", "%2F": "/", "%3A": ":",
+        "%3B": ";", "%3C": "<", "%3D": "=", "%3E": ">", "%3F": "?",
+        "%40": "@", "%5B": "[", "%5C": "\\", "%5D": "]", "%7B": "{",
+        "%7C": "|", "%7D": "}"
+    }
+
+    # Create a regex pattern to match all encoded sequences in the string
+    pattern = re.compile(r"%[0-9A-Fa-f]{2}")
+
+    # Function to replace matched encoded symbols with their decoded values
+    def decode_match(match):
+        encoded = match.group(0)
+        return decode_map.get(encoded, encoded)  # Return the decoded character or keep as-is
+
+    # Use re.sub to perform decoding
+    decoded_string = pattern.sub(decode_match, safe_iri)
+
+    return decoded_string
+
 
 # funciton to parse rdf data in nquads
 def parse(path: str) -> list[Quad]:
@@ -91,7 +116,14 @@ def parse(path: str) -> list[Quad]:
     # Load file
     with open(path, 'r') as f:
         for line in f:
-            line_parts = tokenizer(line)
+            line = line.strip()
+            line_parts = tokenizer(line)      
+
+            # Decode iri safety
+            for i in range(len(line_parts)):
+                line_parts[i] = decode_safe_iri(line_parts[i])
+
+
             # Hanlde without graph
             if len(line_parts) == 4:
                 x = Quad(line_parts[0], line_parts[1], line_parts[2], "")
