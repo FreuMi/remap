@@ -27,7 +27,7 @@ def add_logical_source(g: Graph, tm_name: str, path: str) -> None:
 
     # Add to graph
     g.add((URIRef(tm_name), voc.LOGICAL_SOURCE, bn1))
-    g.add((bn1, voc.LOGICAL_SOURCE, voc.LOGICAL_SOURCE_CLASS))
+    g.add((bn1, voc.RDF_TYPE, voc.LOGICAL_SOURCE_CLASS))
     g.add((bn1, voc.REF_FORMULATION, voc.CSV_FORMAT)) # Only support for csv
     g.add((bn1, voc.SOURCE, bn2))
     g.add((bn2, voc.RDF_TYPE, voc.PATH_SOURCE_CLASS))
@@ -82,7 +82,7 @@ def add_subject(g: Graph, tm_name: str, term_map: str, term_map_type: str, term_
 
         
 # Add a POM
-def add_predicate_object_map(g: Graph, tm_name: str, p_term_map: str, p_term_map_type: str, p_term_type: str, o_term_map: str, o_term_map_type: str, o_term_type: str) -> None:
+def add_predicate_object_map(g: Graph, tm_name: str, p_term_map: str, p_term_map_type: str, p_term_type: str, o_term_map: str, o_term_map_type: str, o_term_type: str, o_data_type: str) -> None:
     bn1 = BNode()
     bn2 = BNode()
     bn3 = BNode()
@@ -92,19 +92,9 @@ def add_predicate_object_map(g: Graph, tm_name: str, p_term_map: str, p_term_map
     # Predicate
     g.add((bn1, voc.PREDICATE_MAP, bn2))
     if p_term_map_type == "constant":
-        g.add((bn2, voc.CONSTANT, Literal(p_term_map)))
+        g.add((bn2, voc.CONSTANT, URIRef(p_term_map)))
     else:
         print("Error: Prediacte term_map_type unsupported! Found", p_term_map_type)
-        sys.exit(1)
-
-    if p_term_type == "iri":
-        g.add((bn2, voc.TERM_TYPE, voc.IRI))
-    elif p_term_type == "blanknode":
-        g.add((bn2, voc.TERM_TYPE, voc.BLANKNODE))
-    elif p_term_type == "literal":
-        g.add((bn2, voc.TERM_TYPE, voc.LITERAL))
-    else:
-        print("Error: Predicate term_type unsupported! Found", p_term_type)
         sys.exit(1)
 
     # Object
@@ -129,8 +119,15 @@ def add_predicate_object_map(g: Graph, tm_name: str, p_term_map: str, p_term_map
         print("Error: Predicate term_type unsupported!")
         sys.exit(1)
 
+    # Add datatype map 
+    if o_data_type != "":
+        bn4 = BNode()
+        g.add((bn3, voc.DATATYPE_MAP, bn4))
+        g.add((bn4, voc.CONSTANT, URIRef(o_data_type)))
 
-def build_sub_graph(file_path_csv: str, s_term_map: str, s_term_map_type: str, s_term_type: str, p_term_map: str, p_term_map_type: str, p_term_type: str, o_term_map: str, o_term_map_type: str, o_term_type: str, g_term_type: str, g_term_map: str, g_term_map_type: str) -> Graph:
+
+
+def build_sub_graph(file_path_csv: str, s_term_map: str, s_term_map_type: str, s_term_type: str, p_term_map: str, p_term_map_type: str, p_term_type: str, o_term_map: str, o_term_map_type: str, o_term_type: str, o_data_type: str, g_term_type: str, g_term_map: str, g_term_map_type: str) -> Graph:
     rml_sub_graph = Graph()
 
     # Set RML namespace
@@ -140,6 +137,6 @@ def build_sub_graph(file_path_csv: str, s_term_map: str, s_term_map_type: str, s
     tm = init_template(rml_sub_graph)
     add_logical_source(rml_sub_graph, tm, file_path_csv)
     add_subject(rml_sub_graph, tm, s_term_map, s_term_map_type, s_term_type, g_term_type, g_term_map, g_term_map_type)
-    add_predicate_object_map(rml_sub_graph, tm, p_term_map, p_term_map_type, p_term_type, o_term_map, o_term_map_type, o_term_type)
+    add_predicate_object_map(rml_sub_graph, tm, p_term_map, p_term_map_type, p_term_type, o_term_map, o_term_map_type, o_term_type, o_data_type)
 
     return rml_sub_graph

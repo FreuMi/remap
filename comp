@@ -35,9 +35,9 @@ RMLTC0015a-CSV: TODO: Multiple Files
 RMLTC0015b-CSV: not applicable
 RMLTC0019a-CSV: ok (TODO: duplicate graphs)
 RMLTC0019b-CSV: not applicable
-RMLTC0020a-CSV: TODO: Base Uri handling
+RMLTC0020a-CSV: ok (TODO: duplicate graphs)
 RMLTC0021a-CSV: TODO: Join
-RMLTC0022a-CSV: TODO: RML Datatypes
+RMLTC0022a-CSV: ok
 RMLTC0022b-CSV: TODO: Base Uri + RML Datatypes
 RMLTC0022c-CSV: TODO: Datatype Map
 RMLTC0024a-CSV: not applicable

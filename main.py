@@ -42,6 +42,9 @@ def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str) -> tuple[st
     return term_map, rdf_term_map_type
     
 def get_term_type(data: str) -> str:
+    if "^^" in data:
+        data = data.split("^^")[0]
+
     res = ""
     if isURI(data):
         res = "iri"
@@ -137,11 +140,26 @@ def parse(path: str) -> list[Quad]:
     return rdf_data
 
 # Remove < >, " ", _: from string 
-def clean_entry(entry: str) -> str|None:
-    if isURI(entry) or isLiteral(entry):
-        return entry[1:-1]
-    if isBlanknode(entry):
-        return entry[2:]
+def clean_entry(entry: str) -> tuple[str,str]:
+    data_type = ""
+    result = ""
+
+    if isURI(entry):
+        result = entry[1:-1]
+    elif isLiteral(entry):
+        # Check for datatype
+        if "^^" in entry:
+            split_data = entry.split("^^")
+            if len(split_data) != 2:
+                print("Error Cleaning! Found:", split_data)
+                sys.exit(1)
+            data_type = split_data[1][1:-1]
+            entry = split_data[0]
+        result = entry[1:-1]
+    elif isBlanknode(entry):
+        result = entry[2:]
+    
+    return result, data_type
 
 def remove_base_uri(entry: str, base_uri: str) -> str:
     if entry != None:
@@ -174,6 +192,14 @@ def isLiteral(value: str) -> bool:
     if value == "":
         return False
     
+    # Filter datatype
+    if "^^" in value:
+        split_value = value.split("^^")
+        if len(split_value) != 2:
+            print("Error splitting data! Found", split_value)
+            sys.exit(1)
+        value = split_value[0]
+        
     if value[0] == "\"" and value[-1] == "\"":
         return True
     else: 
@@ -266,7 +292,7 @@ def isGeneratedByOtherGraph():
 
 def main():
     # Config
-    file_path_csv = 'persons.csv'
+    file_path_csv = 'student.csv'
     file_path_rdf = 'output.nq'
     base_uri = 'http://example.com/base/'
 
@@ -299,8 +325,9 @@ def main():
             s_term_map_type = ""
 
             # clean s value
-            s = clean_entry(s)
-            s = remove_base_uri(s, base_uri)
+            s, _ = clean_entry(s)
+            if s_term_type == "iri":
+                s = remove_base_uri(s, base_uri)
 
             # Iterate over all elements in the row and detect type
             s_term_map = s
@@ -321,8 +348,9 @@ def main():
             p_term_map_type = ""
 
             # clean p value
-            p = clean_entry(p)
-            p = remove_base_uri(p, base_uri)
+            p, _ = clean_entry(p)
+            if p_term_type == "iri":
+                p = remove_base_uri(p, base_uri)
 
             p_term_map = p
             for key, value in row.items():
@@ -343,8 +371,9 @@ def main():
             o_term_map_type = ""
 
             # clean o value
-            o = clean_entry(o)
-            o = remove_base_uri(o, base_uri)
+            o, o_data_type = clean_entry(o)
+            if o_term_type == "iri":
+                o = remove_base_uri(o, base_uri)
 
             o_term_map = o
             for key, value in row.items():
@@ -365,10 +394,11 @@ def main():
             g_term_map_type = ""
 
             # clean o value
-            g = clean_entry(g)
-            g = remove_base_uri(g, base_uri)
+            g, _ = clean_entry(g)
+            if g_term_type == "iri":
+                g = remove_base_uri(g, base_uri)
             
-            if g == None:
+            if g == "":
                 g_term_type = ""
                 g_term_map = ""
                 g_term_map_type = ""
@@ -387,7 +417,7 @@ def main():
             g_term_map = g_term_map.replace("___", " ")
 
             ## Build rml graph ##
-            rml_sub_graph = graph_builder.build_sub_graph(file_path_csv, s_term_map, s_term_map_type, s_term_type, p_term_map, p_term_map_type, p_term_type, o_term_map, o_term_map_type, o_term_type, g_term_type, g_term_map, g_term_map_type)
+            rml_sub_graph = graph_builder.build_sub_graph(file_path_csv, s_term_map, s_term_map_type, s_term_type, p_term_map, p_term_map_type, p_term_type, o_term_map, o_term_map_type, o_term_type, o_data_type, g_term_type, g_term_map, g_term_map_type)
             
             if not isDuplicateGraph(rml_sub_graph, rml_sub_graphs):
 
@@ -410,5 +440,5 @@ def main():
         str_result_graph = f"@base <{base_uri}> .\n" + str_result_graph
 
     print(str_result_graph)
-    
+
 main()

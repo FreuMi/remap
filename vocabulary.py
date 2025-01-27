@@ -22,6 +22,7 @@ POM = URIRef("http://w3id.org/rml/predicateObjectMap")
 PREDICATE_MAP = URIRef("http://w3id.org/rml/predicateMap")
 OBJECT_MAP = URIRef("http://w3id.org/rml/objectMap")
 GRAPH_MAP = URIRef("http://w3id.org/rml/graphMap")
+DATATYPE_MAP = URIRef("http://w3id.org/rml/datatypeMap")
 
 
 IRI = URIRef("http://w3id.org/rml/IRI")
