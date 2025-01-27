@@ -141,7 +141,6 @@ def parse(path: str) -> list[Quad]:
 
 # Remove < >, " ", _: from string 
 def clean_entry(entry: str) -> tuple[str,str]:
-    data_type = ""
     result = ""
 
     if isURI(entry):
@@ -153,13 +152,12 @@ def clean_entry(entry: str) -> tuple[str,str]:
             if len(split_data) != 2:
                 print("Error Cleaning! Found:", split_data)
                 sys.exit(1)
-            data_type = split_data[1][1:-1]
             entry = split_data[0]
         result = entry[1:-1]
     elif isBlanknode(entry):
         result = entry[2:]
     
-    return result, data_type
+    return result.strip()
 
 def remove_base_uri(entry: str, base_uri: str) -> str:
     if entry != None:
@@ -303,6 +301,9 @@ def main():
     # Rename cols to remove whitespace
     data.columns = [col.replace(" ", "___") for col in data.columns]
 
+    # if the column contains http://www.w3.org/2001/XMLSchema# rename for easier processing.
+    data = data.replace(to_replace=r'http://www\.w3\.org/2001/XMLSchema#', value='|||', regex=True)
+
     # Load RDF data
     rdf_data = parse(file_path_rdf)
     rml_sub_graphs = []
@@ -310,9 +311,12 @@ def main():
     # Iterate over all csv data
     for row in data.itertuples(index=False):
         row: dict[str, str] = row._asdict() 
+        print("START ITERATIION WITH", row)
 
         # Iterate over the graph
+        temp_graph_data = []
         for element in rdf_data:
+            print("ITERATE OVER GRAPH", element)
             # Access data
             s = element.s
             p = element.p
@@ -325,7 +329,7 @@ def main():
             s_term_map_type = ""
 
             # clean s value
-            s, _ = clean_entry(s)
+            s = clean_entry(s)
             if s_term_type == "iri":
                 s = remove_base_uri(s, base_uri)
 
@@ -348,7 +352,7 @@ def main():
             p_term_map_type = ""
 
             # clean p value
-            p, _ = clean_entry(p)
+            p = clean_entry(p)
             if p_term_type == "iri":
                 p = remove_base_uri(p, base_uri)
 
@@ -371,12 +375,13 @@ def main():
             o_term_map_type = ""
 
             # clean o value
-            o, o_data_type = clean_entry(o)
+            o = clean_entry(o)
             if o_term_type == "iri":
                 o = remove_base_uri(o, base_uri)
 
             o_term_map = o
             for key, value in row.items():
+                print("ITERATE OVER VALUE", key, value)
                 term_map, term_map_type = get_term_map_type(o_term_map, key, value)
                 if o_term_map_type == "":
                     o_term_map = term_map
@@ -394,7 +399,7 @@ def main():
             g_term_map_type = ""
 
             # clean o value
-            g, _ = clean_entry(g)
+            g = clean_entry(g)
             if g_term_type == "iri":
                 g = remove_base_uri(g, base_uri)
             
@@ -416,14 +421,75 @@ def main():
             # Rename inserted values from pandas headline
             g_term_map = g_term_map.replace("___", " ")
 
-            ## Build rml graph ##
-            rml_sub_graph = graph_builder.build_sub_graph(file_path_csv, s_term_map, s_term_map_type, s_term_type, p_term_map, p_term_map_type, p_term_type, o_term_map, o_term_map_type, o_term_type, o_data_type, g_term_type, g_term_map, g_term_map_type)
-            
-            if not isDuplicateGraph(rml_sub_graph, rml_sub_graphs):
+            ## Handle datatype ##
+            raw_o_value = element.o
+            # Check for datatype
+            res = raw_o_value.split("^^")
+            if len(res) != 2:
+                data_type_term_type = ""
+                data_type_term_map = ""
+                data_type_term_map_type = ""
+            else:
+                data_type_string = res[1]
+                # clean data_type_string value
+                data_type_string = clean_entry(data_type_string)
 
-                rml_sub_graphs.append(rml_sub_graph)
+                data_type_term_type = "iri"
+                data_type_term_map = ""
+                data_type_term_map_type = ""
+
+                data_type_term_map = data_type_string
+                # Remove xsd schema prefix
+                data_type_term_map = data_type_term_map.replace("http://www.w3.org/2001/XMLSchema#", "|||")
+
+                for key, value in row.items():
+                    term_map, term_map_type = get_term_map_type(data_type_term_map, key, value)
+                    if data_type_term_map_type == "":
+                        data_type_term_map = term_map
+                        data_type_term_map_type = term_map_type
+                    elif term_map_type != "constant":
+                        data_type_term_map = term_map
+                        data_type_term_map_type = term_map_type
+                
+                # Rename inserted values from pandas headline
+                data_type_term_map = data_type_term_map.replace("___", " ")
+                # Add xsd prefix back
+                data_type_term_map = data_type_term_map.replace("|||", "http://www.w3.org/2001/XMLSchema#")
+
+            ## Build rml graph ##
+            rml_sub_graph = graph_builder.build_sub_graph(file_path_csv, s_term_map, s_term_map_type, s_term_type,\
+                                                        p_term_map, p_term_map_type, p_term_type, \
+                                                        o_term_map, o_term_map_type, o_term_type, \
+                                                        g_term_type, g_term_map, g_term_map_type, \
+                                                        data_type_term_type, data_type_term_map, data_type_term_map_type)
+            
+            if not isDuplicateGraph(rml_sub_graph, temp_graph_data):
+
+                temp_graph_data.append(rml_sub_graph)
             else:
                 print("DUPLICATE")
+        # Filter rules
+        if len(temp_graph_data) > 1:
+            # If more then one rule is generated, take the one that has not only constants
+            print("== CHECKING ==")
+            new_g = None
+            cnt = 0
+            for g in temp_graph_data:
+                # data = (new_path, sub, subject_type, pred, predicate_type, obj, object_type)
+                data = extract_information(g)
+                if data[2] == "constant" and \
+                   data[4] == "constant" and \
+                   data[6] == "constant":
+                    continue
+                new_g = g
+                cnt += 1
+            if cnt == 1:
+                rml_sub_graphs.append(new_g)
+                continue
+            print("More than one found, cant handle it. Found", cnt)
+            sys.exit(1)
+        elif len(temp_graph_data) == 1:
+            rml_sub_graphs.append(temp_graph_data[0])
 
     # Print output
     result_graph = Graph()
