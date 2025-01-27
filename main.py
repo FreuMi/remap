@@ -4,6 +4,7 @@ import sys
 from dataclasses import dataclass
 import graph_builder
 import re
+import argparse
 
 # Class to store quad data
 @dataclass
@@ -290,12 +291,30 @@ def isGeneratedByOtherGraph():
 
 def main():
     # Config
-    file_path_csv = 'student.csv'
-    file_path_rdf = 'output.nq'
-    base_uri = 'http://example.com/base/'
+    file_path_csv = ""
+    file_path_rdf = ""
+    base_uri = "http://example.com/base/"
+    output_file = "generated_mapping.ttl"
+
+    parser = argparse.ArgumentParser(description="A simple CLI example")
+    parser.add_argument("--csv", type=str, help="The path to the csv file")
+    parser.add_argument("--rdf", type=str, help="The path to the RDF file")
+
+    args = parser.parse_args()
+
+    if args.csv:
+        file_path_csv = args.csv
+    if args.rdf:
+        file_path_rdf = args.rdf
+
+    if file_path_csv == "":
+        print("--csv is required!")
+        sys.exit(1)
+    if file_path_rdf == "":
+        print("--rdf is required!")
+        sys.exit(1)
 
     print("Starting...")
-
     # Load csv data
     data: pd.DataFrame = pd.read_csv(file_path_csv, dtype=str)
     # Rename cols to remove whitespace
@@ -311,12 +330,10 @@ def main():
     # Iterate over all csv data
     for row in data.itertuples(index=False):
         row: dict[str, str] = row._asdict() 
-        print("START ITERATIION WITH", row)
 
         # Iterate over the graph
         temp_graph_data = []
         for element in rdf_data:
-            print("ITERATE OVER GRAPH", element)
             # Access data
             s = element.s
             p = element.p
@@ -381,7 +398,6 @@ def main():
 
             o_term_map = o
             for key, value in row.items():
-                print("ITERATE OVER VALUE", key, value)
                 term_map, term_map_type = get_term_map_type(o_term_map, key, value)
                 if o_term_map_type == "":
                     o_term_map = term_map
@@ -464,16 +480,11 @@ def main():
                                                         data_type_term_type, data_type_term_map, data_type_term_map_type)
             
             if not isDuplicateGraph(rml_sub_graph, temp_graph_data):
-
                 temp_graph_data.append(rml_sub_graph)
-            else:
-                print("DUPLICATE")
+
         # Filter rules
         if len(temp_graph_data) > 1:
             # If more then one rule is generated, take the one that has not only constants
-            print("== CHECKING ==")
-            new_g = None
-            cnt = 0
             for g in temp_graph_data:
                 # data = (new_path, sub, subject_type, pred, predicate_type, obj, object_type)
                 data = extract_information(g)
@@ -481,13 +492,10 @@ def main():
                    data[4] == "constant" and \
                    data[6] == "constant":
                     continue
-                new_g = g
-                cnt += 1
-            if cnt == 1:
-                rml_sub_graphs.append(new_g)
-                continue
-            print("More than one found, cant handle it. Found", cnt)
-            sys.exit(1)
+                
+                if not isDuplicateGraph(g, rml_sub_graphs):
+                    rml_sub_graphs.append(g)
+
         elif len(temp_graph_data) == 1:
             rml_sub_graphs.append(temp_graph_data[0])
 
@@ -505,6 +513,11 @@ def main():
     if base_uri != "":
         str_result_graph = f"@base <{base_uri}> .\n" + str_result_graph
 
-    print(str_result_graph)
+    # Write to file.
+    with open(output_file, "w") as file:
+        file.write(str_result_graph)
 
-main()
+    print("Finished. Generated mapping stored in:", output_file)
+
+if __name__ == "__main__":  
+    main()

@@ -39,7 +39,7 @@ RMLTC0020a-CSV: ok (TODO: duplicate graphs)
 RMLTC0021a-CSV: TODO: Join
 RMLTC0022a-CSV: ok
 RMLTC0022b-CSV: ok
-RMLTC0022c-CSV: TODO: Datatype Map
+RMLTC0022c-CSV: ok
 RMLTC0024a-CSV: not applicable
 RMLTC0024b-CSV: not applicable
 RMLTC0024c-CSV: not applicable
