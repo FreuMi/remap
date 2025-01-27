@@ -27,6 +27,7 @@ def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str) -> tuple[st
         else:
             print("Error detecting term_map_type! Found:", rdf_term_map_type)
             sys.exit(1)
+
     term_map = ""
     if rdf_term_map_type == "constant":
         term_map = rdf_term
@@ -265,6 +266,9 @@ def main():
 
     # Load csv data
     data: pd.DataFrame = pd.read_csv(file_path_csv, dtype=str)
+    # Rename cols to remove whitespace
+    data.columns = [col.replace(" ", "___") for col in data.columns]
+
     # Load RDF data
     rdf_data = parse(file_path_rdf)
     rml_sub_graphs = []
@@ -285,7 +289,7 @@ def main():
             s_term_type = get_term_type(s)
             s_term_map = ""
             s_term_map_type = ""
-            
+
             # clean s value
             s = clean_entry(s)
             # Iterate over all elements in the row and detect type
@@ -298,7 +302,9 @@ def main():
                 elif term_map_type != "constant":
                     s_term_map = term_map
                     s_term_map_type = term_map_type
-                
+            # Rename inserted values from pandas headline
+            s_term_map = s_term_map.replace("___", " ")
+
             ## Handle predicate ##
             p_term_type = get_term_type(p)
             p_term_map = ""
@@ -316,6 +322,9 @@ def main():
                     p_term_map = term_map
                     p_term_map_type = term_map_type
 
+            # Rename inserted values from pandas headline
+            p_term_map = p_term_map.replace("___", " ")
+
             ## Handle object ##
             o_term_type = get_term_type(o)
             o_term_map = ""
@@ -332,6 +341,9 @@ def main():
                 elif term_map_type != "constant":
                     o_term_map = term_map
                     o_term_map_type = term_map_type
+
+            # Rename inserted values from pandas headline
+            o_term_map = o_term_map.replace("___", " ")
 
             ## Handle graph ##
             g_term_type = "iri"
@@ -356,6 +368,9 @@ def main():
                         g_term_map = term_map
                         g_term_map_type = term_map_type
             
+            # Rename inserted values from pandas headline
+            g_term_map = g_term_map.replace("___", " ")
+
             ## Build rml graph ##
             rml_sub_graph = graph_builder.build_sub_graph(file_path_csv, s_term_map, s_term_map_type, s_term_type, p_term_map, p_term_map_type, p_term_type, o_term_map, o_term_map_type, o_term_type, g_term_type, g_term_map, g_term_map_type)
             
