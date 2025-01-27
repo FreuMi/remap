@@ -137,11 +137,17 @@ def parse(path: str) -> list[Quad]:
     return rdf_data
 
 # Remove < >, " ", _: from string 
-def clean_entry(entry: str) -> str:
+def clean_entry(entry: str) -> str|None:
     if isURI(entry) or isLiteral(entry):
         return entry[1:-1]
     if isBlanknode(entry):
         return entry[2:]
+
+def remove_base_uri(entry: str, base_uri: str) -> str:
+    if entry != None:
+        if base_uri in entry:
+            entry = entry.replace(base_uri, "")
+    return entry
 
 # Check if entry is an URI
 def isURI(value: str) -> bool:
@@ -260,8 +266,10 @@ def isGeneratedByOtherGraph():
 
 def main():
     # Config
-    file_path_csv = 'student.csv'
+    file_path_csv = 'persons.csv'
     file_path_rdf = 'output.nq'
+    base_uri = 'http://example.com/base/'
+
     print("Starting...")
 
     # Load csv data
@@ -276,7 +284,7 @@ def main():
     # Iterate over all csv data
     for row in data.itertuples(index=False):
         row: dict[str, str] = row._asdict() 
-        
+
         # Iterate over the graph
         for element in rdf_data:
             # Access data
@@ -292,6 +300,8 @@ def main():
 
             # clean s value
             s = clean_entry(s)
+            s = remove_base_uri(s, base_uri)
+
             # Iterate over all elements in the row and detect type
             s_term_map = s
             for key, value in row.items():
@@ -312,6 +322,8 @@ def main():
 
             # clean p value
             p = clean_entry(p)
+            p = remove_base_uri(p, base_uri)
+
             p_term_map = p
             for key, value in row.items():
                 term_map, term_map_type = get_term_map_type(p_term_map, key, value)
@@ -332,6 +344,8 @@ def main():
 
             # clean o value
             o = clean_entry(o)
+            o = remove_base_uri(o, base_uri)
+
             o_term_map = o
             for key, value in row.items():
                 term_map, term_map_type = get_term_map_type(o_term_map, key, value)
@@ -352,6 +366,7 @@ def main():
 
             # clean o value
             g = clean_entry(g)
+            g = remove_base_uri(g, base_uri)
             
             if g == None:
                 g_term_type = ""
@@ -387,6 +402,13 @@ def main():
     result_graph.bind("rml", RML)
     for rml_sub_graph in rml_sub_graphs:
         result_graph += rml_sub_graph
-    print(result_graph.serialize(format="turtle"))
+    
+    str_result_graph = result_graph.serialize(format="turtle")
+    
+    # Add base uri if needed
+    if base_uri != "":
+        str_result_graph = f"@base <{base_uri}> .\n" + str_result_graph
 
+    print(str_result_graph)
+    
 main()
