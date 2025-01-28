@@ -286,8 +286,30 @@ def isDuplicateGraph(graph: Graph, all_graphs: list[Graph]) -> bool:
 
     return False
 
-def isGeneratedByOtherGraph():
-    pass
+
+def mask_string(input_data: str, row: dict[str, str]) -> str:
+    # Replace entries with |||key||| instead of {key} for easier masking
+    for key, _ in row.items():
+        key = key.replace("___", " ")
+        input_data = input_data.replace(f"{{{key}}}", f"|||{key}|||")
+
+    # Mask all { and }
+    tmp_input_data = ""
+    for char in input_data:
+        if char == "{":
+            tmp_input_data += "\\{"
+            continue
+        elif char == "}":
+            tmp_input_data += "\\}"
+            continue
+        tmp_input_data += char
+
+    # replace |||key||| with {key}
+    for key, _ in row.items():
+        key = key.replace("___", " ")
+        tmp_input_data = tmp_input_data.replace(f"|||{key}|||", f"{{{key}}}")
+
+    return tmp_input_data
 
 def main():
     # Config
@@ -409,6 +431,9 @@ def main():
             # Rename inserted values from pandas headline
             o_term_map = o_term_map.replace("___", " ")
 
+            # Mask string
+            o_term_map = mask_string(o_term_map, row)
+            
             ## Handle graph ##
             g_term_type = "iri"
             g_term_map = ""

@@ -77,7 +77,7 @@ for folder in folders:
     run_console_program(command)
 
     # Execute generate mapping file
-    command = ["java", "-jar", "burp.jar", "-m", "generated_mapping.ttl", "-o", "res.nq"]
+    command = ["java", "-jar", "burp.jar", "-m", "generated_mapping.ttl", "-o", "res.nq", "-b", "http://example.com/base/"]
     run_console_program(command)
 
     # Compare outputs 
