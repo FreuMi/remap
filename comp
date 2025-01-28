@@ -44,5 +44,5 @@ RMLTC0024a-CSV: not applicable
 RMLTC0024b-CSV: not applicable
 RMLTC0024c-CSV: not applicable
 RMLTC0024d-CSV: not applicable
-RMLTC0024e-CSV: TODO: Masking
-RMLTC0024f-CSV: TODO: Masking
+RMLTC0024e-CSV: ok (Not supported by BURP)
+RMLTC0024f-CSV: ok (Not supported by BURP)

@@ -290,9 +290,8 @@ def isDuplicateGraph(graph: Graph, all_graphs: list[Graph]) -> bool:
 def mask_string(input_data: str, row: dict[str, str]) -> str:
     # Replace entries with |||key||| instead of {key} for easier masking
     for key, _ in row.items():
-        key = key.replace("___", " ")
         input_data = input_data.replace(f"{{{key}}}", f"|||{key}|||")
-
+    
     # Mask all { and }
     tmp_input_data = ""
     for char in input_data:
@@ -306,7 +305,6 @@ def mask_string(input_data: str, row: dict[str, str]) -> str:
 
     # replace |||key||| with {key}
     for key, _ in row.items():
-        key = key.replace("___", " ")
         tmp_input_data = tmp_input_data.replace(f"|||{key}|||", f"{{{key}}}")
 
     return tmp_input_data
@@ -340,7 +338,12 @@ def main():
     # Load csv data
     data: pd.DataFrame = pd.read_csv(file_path_csv, dtype=str)
     # Rename cols to remove whitespace
-    data.columns = [col.replace(" ", "___") for col in data.columns]
+    data.columns = [col.replace(" ", "a___") for col in data.columns]
+    # Rename cols to remove {}
+    data.columns = [col.replace("{", "ab____") for col in data.columns]
+    data.columns = [col.replace("}", "abb_____") for col in data.columns]
+    # Rename cols to remove \
+    data.columns = [col.replace("\\", "abbb______") for col in data.columns]
 
     # if the column contains http://www.w3.org/2001/XMLSchema# rename for easier processing.
     data = data.replace(to_replace=r'http://www\.w3\.org/2001/XMLSchema#', value='|||', regex=True)
@@ -382,8 +385,14 @@ def main():
                 elif term_map_type != "constant":
                     s_term_map = term_map
                     s_term_map_type = term_map_type
+
+            s_term_map = mask_string(s_term_map, row)
+
             # Rename inserted values from pandas headline
-            s_term_map = s_term_map.replace("___", " ")
+            s_term_map = s_term_map.replace("a___", " ")
+            s_term_map = s_term_map.replace("ab____", "\\{")
+            s_term_map = s_term_map.replace("abb_____", "\\}")
+            s_term_map = s_term_map.replace("abbb______", "\\")
 
             ## Handle predicate ##
             p_term_type = get_term_type(p)
@@ -406,7 +415,10 @@ def main():
                     p_term_map_type = term_map_type
 
             # Rename inserted values from pandas headline
-            p_term_map = p_term_map.replace("___", " ")
+            p_term_map = p_term_map.replace("a___", " ")
+            p_term_map = p_term_map.replace("ab____", "{")
+            p_term_map = p_term_map.replace("abb_____", "}")
+            p_term_map = p_term_map.replace("abbb______", "\\")
 
             ## Handle object ##
             o_term_type = get_term_type(o)
@@ -428,11 +440,15 @@ def main():
                     o_term_map = term_map
                     o_term_map_type = term_map_type
 
-            # Rename inserted values from pandas headline
-            o_term_map = o_term_map.replace("___", " ")
-
             # Mask string
             o_term_map = mask_string(o_term_map, row)
+
+            # Rename inserted values from pandas headline
+            o_term_map = o_term_map.replace("a___", " ")
+            o_term_map = o_term_map.replace("ab____", "\\\\{")
+            o_term_map = o_term_map.replace("abb_____", "\\\\}")
+            o_term_map = o_term_map.replace("abbb______", "\\")
+
             
             ## Handle graph ##
             g_term_type = "iri"
@@ -460,7 +476,11 @@ def main():
                         g_term_map_type = term_map_type
             
             # Rename inserted values from pandas headline
-            g_term_map = g_term_map.replace("___", " ")
+            g_term_map = g_term_map.replace("a___", " ")
+            g_term_map = g_term_map.replace("ab____", "{")
+            g_term_map = g_term_map.replace("abb_____", "}")
+            g_term_map = g_term_map.replace("abbb______", "\\")
+
 
             ## Handle datatype ##
             raw_o_value = element.o
@@ -493,7 +513,12 @@ def main():
                         data_type_term_map_type = term_map_type
                 
                 # Rename inserted values from pandas headline
-                data_type_term_map = data_type_term_map.replace("___", " ")
+                data_type_term_map = data_type_term_map.replace("a___", " ")
+                data_type_term_map = data_type_term_map.replace("ab____", "{")
+                data_type_term_map = data_type_term_map.replace("abb_____", "}")
+                data_type_term_map = data_type_term_map.replace("abbb______", "\\")
+
+
                 # Add xsd prefix back
                 data_type_term_map = data_type_term_map.replace("|||", "http://www.w3.org/2001/XMLSchema#")
 
@@ -537,6 +562,11 @@ def main():
     # Add base uri if needed
     if base_uri != "":
         str_result_graph = f"@base <{base_uri}> .\n" + str_result_graph
+
+    # Adjust ////
+    str_result_graph = str_result_graph.replace("\\\\","\\")
+    str_result_graph = str_result_graph.replace("\\\\\\\\","\\\\")
+
 
     # Write to file.
     with open(output_file, "w") as file:
