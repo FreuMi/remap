@@ -64,18 +64,21 @@ for folder in folders:
     all_files = os.listdir(f'{directory}{folder}')
     
     # Get csv and rdf file
-    csv_file = ""
+    csv_files = []
     rdf_file = ""
     for file in all_files:
         if ".csv" in file:
-            csv_file = file
+            csv_files.append(file)
         elif ".nq" in file:
             rdf_file = file
 
+    csv_file_strs = [f'{directory}{folder}/{csv_file}' for csv_file in csv_files]
+    
     rdf_file_refernce = f'{directory}{folder}/output.nq'
-    command = ['python3', 'main.py', '--csv', f'{directory}{folder}/{csv_file}', "--rdf", f'{directory}{folder}/{rdf_file}']
+    command = ['python3', 'main.py', '--csv'] + csv_file_strs + ["--rdf", f'{directory}{folder}/{rdf_file}']
     run_console_program(command)
 
+    print("===")
     # Execute generate mapping file
     command = ["java", "-jar", "burp.jar", "-m", "generated_mapping.ttl", "-o", "res.nq", "-b", "http://example.com/base/"]
     run_console_program(command)

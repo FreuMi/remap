@@ -407,28 +407,46 @@ def generate_expected_triple(data: pd.DataFrame, info) -> set[str]:
     return generated_triples
 
 # Filter data
-def filter_mappings(possible_triples: list[set[str]], rml_sub_graphs: list[Graph]) -> tuple[list[Graph]]:
-    # Track unique sets of triples
-    unique_triples = set()
-    filtered_graphs: list[Graph] = []
+def filter_mappings(possible_triples: list[set[str]], rml_sub_graphs: list[Graph]) -> list[Graph]:
+    # Pair each set of triples with the corresponding graph
+    sets_and_graphs = [(s, g) for s, g in zip(possible_triples, rml_sub_graphs)]
 
-    for i in range(len(possible_triples)):
-        triples = possible_triples[i]
-        g = rml_sub_graphs[i]
+    #
+    # STEP 1: Remove duplicate
+    seen_frozensets = {}         # Map frozenset to first index where it appears
+    duplicate_indices = set()    # Indices of sets that are duplicates
+    for i, (triples_i, graph_i) in enumerate(sets_and_graphs):
+        as_frozenset = frozenset(triples_i)
+        if as_frozenset not in seen_frozensets:
+            # First time so store its index
+            seen_frozensets[as_frozenset] = i
+        else:
+            # mark index to remove
+            duplicate_indices.add(i)
 
-        # Check if this triple set is already stored (duplicate) or is a subset of another
-        is_subset = False
-        for other_triples in unique_triples:
-            if triples.issubset(other_triples) or triples == other_triples:  # Handles subsets and duplicates
-                is_subset = True
-                break
+    # reduced list without duplicates
+    reduced_sets_and_graphs = [
+        (triples_i, graph_i)
+        for i, (triples_i, graph_i) in enumerate(sets_and_graphs)
+        if i not in duplicate_indices
+    ]
 
-        # If it's not a subset or duplicate, keep it and add it to the unique set
-        if not is_subset:
-            unique_triples.add(frozenset(triples))
-            filtered_graphs.append(g)
+    ### Remove sets that are subsets of another set
+    to_remove = set()
+    for i, (si, gi) in enumerate(reduced_sets_and_graphs):
+        for j, (sj, gj) in enumerate(reduced_sets_and_graphs):
+            # Do not compare an element with itself
+            if i != j and si.issubset(sj):
+                # If si is a subset of sj, mark i for removal
+                to_remove.add(i)
 
-    return filtered_graphs
+    # Build the final list (only keep maximal sets, ignoring subsets)
+    final_graphs = [
+        g for i, (s, g) in enumerate(reduced_sets_and_graphs)
+        if i not in to_remove
+    ]
+
+    return final_graphs
 
 def main():
     # Config
@@ -683,6 +701,8 @@ def main():
 
     filtered_graphs = filter_mappings(possible_triples, rml_sub_graphs)
     rml_sub_graphs = filtered_graphs
+    for rml_sub_graph in rml_sub_graphs:
+        info = extract_information(rml_sub_graph)
 
     # Check if all triples are expected
     filtered_graphs = []
