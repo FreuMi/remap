@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import graph_builder
 import re
 import argparse
+import subprocess
 
 # Class to store quad data
 @dataclass
@@ -309,6 +310,126 @@ def mask_string(input_data: str, row: dict[str, str]) -> str:
 
     return tmp_input_data
 
+# Generate expected triple
+def generate_expected_triple(data: pd.DataFrame, info) -> set[str]:
+    # Generate data
+    generated_triples = set()
+
+    for row in data.itertuples(index=False):
+        row: dict[str, str] = row._asdict() 
+        s = ""
+        p = ""
+        o = ""
+
+        # Subject
+        if info[2] == "constant":
+            s = info[1]
+        elif info[2] == "reference":
+            key = info[1]
+            key = key.replace(" ", "a___")
+            key = key.replace("{", "ab____")
+            key = key.replace("}", "abb_____")
+            key = key.replace("\\", "abbb______")
+            s = row[key]
+        elif info[2] == "template":
+            # Get template refernces
+            matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[1])
+            s = info[1]
+            for match in matches:
+                match_org = match
+                match = match.replace(" ", "a___")
+                match = match.replace("{", "ab____")
+                match = match.replace("}", "abb_____")
+                match = match.replace("\\", "abbb______")
+
+                s = s.replace("{"+match_org+"}", row[match])
+
+        s = s.replace("a___", " ")
+        s = s.replace("ab____", "\\{")
+        s = s.replace("abb_____", "\\}")
+        s = s.replace("abbb______", "\\")
+
+        if info[4] == "constant":
+            p = info[3]
+        elif info[4] == "reference":
+            key = info[3]
+            key = key.replace(" ", "a___")
+            key = key.replace("{", "ab____")
+            key = key.replace("}", "abb_____")
+            key = key.replace("\\", "abbb______")
+            p = row[key]
+        elif info[4] == "template":
+            # Get template refernces
+            matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[3])
+            p = info[3]
+            for match in matches:
+                match_org = match
+                match = match.replace(" ", "a___")
+                match = match.replace("{", "ab____")
+                match = match.replace("}", "abb_____")
+                match = match.replace("\\", "abbb______")
+                p = p.replace("{"+match_org+"}", row[match])
+        
+        p = p.replace("a___", " ")
+        p = p.replace("ab____", "\\{")
+        p = p.replace("abb_____", "\\}")
+        p = p.replace("abbb______", "\\")
+
+        if info[6] == "constant":
+            o = info[5]
+        elif info[6] == "reference":
+            key = info[5]
+            key = key.replace(" ", "a___")
+            key = key.replace("{", "ab____")
+            key = key.replace("}", "abb_____")
+            key = key.replace("\\", "abbb______")
+            o = row[key]
+        elif info[6] == "template":
+            # Get template refernces
+            matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[5])
+            o = info[5]
+            for match in matches:
+                match_org = match
+                match = match.replace(" ", "a___")
+                match = match.replace("{", "ab____")
+                match = match.replace("}", "abb_____")
+                match = match.replace("\\", "abbb______")
+                o = o.replace("{"+match_org+"}", row[match])
+
+        o = o.replace("a___", " ")
+        o = o.replace("ab____", "\\{")
+        o = o.replace("abb_____", "\\}")
+        o = o.replace("abbb______", "\\")
+
+        generated_triples.add(f"{s}|{p}|{o}")
+
+
+    return generated_triples
+
+# Filter data
+def filter_mappings(possible_triples: list[set[str]], rml_sub_graphs: list[Graph]) -> tuple[list[Graph]]:
+    # Track unique sets of triples
+    unique_triples = set()
+    filtered_graphs: list[Graph] = []
+
+    for i in range(len(possible_triples)):
+        triples = possible_triples[i]
+        g = rml_sub_graphs[i]
+
+        # Check if this triple set is already stored (duplicate) or is a subset of another
+        is_subset = False
+        for other_triples in unique_triples:
+            if triples.issubset(other_triples) or triples == other_triples:  # Handles subsets and duplicates
+                is_subset = True
+                break
+
+        # If it's not a subset or duplicate, keep it and add it to the unique set
+        if not is_subset:
+            unique_triples.add(frozenset(triples))
+            filtered_graphs.append(g)
+
+    return filtered_graphs
+
 def main():
     # Config
     file_path_csv = ""
@@ -317,7 +438,7 @@ def main():
     output_file = "generated_mapping.ttl"
 
     parser = argparse.ArgumentParser(description="A simple CLI example")
-    parser.add_argument("--csv", type=str, help="The path to the csv file")
+    parser.add_argument("--csv", type=str, nargs="+", help="Paths to one or more CSV files")
     parser.add_argument("--rdf", type=str, help="The path to the RDF file")
 
     args = parser.parse_args()
@@ -335,219 +456,265 @@ def main():
         sys.exit(1)
 
     print("Starting...")
-    # Load csv data
-    data: pd.DataFrame = pd.read_csv(file_path_csv, dtype=str)
-    # Rename cols to remove whitespace
-    data.columns = [col.replace(" ", "a___") for col in data.columns]
-    # Rename cols to remove {}
-    data.columns = [col.replace("{", "ab____") for col in data.columns]
-    data.columns = [col.replace("}", "abb_____") for col in data.columns]
-    # Rename cols to remove \
-    data.columns = [col.replace("\\", "abbb______") for col in data.columns]
-
-    # if the column contains http://www.w3.org/2001/XMLSchema# rename for easier processing.
-    data = data.replace(to_replace=r'http://www\.w3\.org/2001/XMLSchema#', value='|||', regex=True)
-
     # Load RDF data
     rdf_data = parse(file_path_rdf)
     rml_sub_graphs = []
+    stored_data = {}
 
-    # Iterate over all csv data
-    for row in data.itertuples(index=False):
-        row: dict[str, str] = row._asdict() 
+    for csv_path in file_path_csv:
+        # Load csv data
+        data: pd.DataFrame = pd.read_csv(csv_path, dtype=str)
+        # Rename cols to remove whitespace
+        data.columns = [col.replace(" ", "a___") for col in data.columns]
+        # Rename cols to remove {}
+        data.columns = [col.replace("{", "ab____") for col in data.columns]
+        data.columns = [col.replace("}", "abb_____") for col in data.columns]
+        # Rename cols to remove \
+        data.columns = [col.replace("\\", "abbb______") for col in data.columns]
 
-        # Iterate over the graph
-        temp_graph_data = []
-        for element in rdf_data:
-            # Access data
-            s = element.s
-            p = element.p
-            o = element.o
-            g = element.g
+        # if the column contains http://www.w3.org/2001/XMLSchema# rename for easier processing.
+        data = data.replace(to_replace=r'http://www\.w3\.org/2001/XMLSchema#', value='|||', regex=True)
 
-            ## Handle subject ##
-            s_term_type = get_term_type(s)
-            s_term_map = ""
-            s_term_map_type = ""
+        # Store generated graphs for this interation
+        tmp_rml_sub_graphs = []
 
-            # clean s value
-            s = clean_entry(s)
-            if s_term_type == "iri":
-                s = remove_base_uri(s, base_uri)
+        # Iterate over all csv data
+        for row in data.itertuples(index=False):
+            row: dict[str, str] = row._asdict() 
+            # Iterate over the graph
+            for element in rdf_data:
+                # Access data
+                s = element.s
+                p = element.p
+                o = element.o
+                g = element.g
 
-            # Iterate over all elements in the row and detect type
-            s_term_map = s
-            for key, value in row.items():
-                term_map, term_map_type = get_term_map_type(s_term_map, key, value)
-                if s_term_map_type == "":
-                    s_term_map = term_map
-                    s_term_map_type = term_map_type
-                elif term_map_type != "constant":
-                    s_term_map = term_map
-                    s_term_map_type = term_map_type
+                ## Handle subject ##
+                s_term_type = get_term_type(s)
+                s_term_map = ""
+                s_term_map_type = ""
 
-            s_term_map = mask_string(s_term_map, row)
+                # clean s value
+                s = clean_entry(s)
+                if s_term_type == "iri":
+                    s = remove_base_uri(s, base_uri)
 
-            # Rename inserted values from pandas headline
-            s_term_map = s_term_map.replace("a___", " ")
-            s_term_map = s_term_map.replace("ab____", "\\{")
-            s_term_map = s_term_map.replace("abb_____", "\\}")
-            s_term_map = s_term_map.replace("abbb______", "\\")
+                # Iterate over all elements in the row and detect type
+                s_term_map = s
+                for key, value in row.items():
+                    term_map, term_map_type = get_term_map_type(s_term_map, key, value)
+                    if s_term_map_type == "":
+                        s_term_map = term_map
+                        s_term_map_type = term_map_type
+                    elif term_map_type != "constant":
+                        s_term_map = term_map
+                        s_term_map_type = term_map_type
 
-            ## Handle predicate ##
-            p_term_type = get_term_type(p)
-            p_term_map = ""
-            p_term_map_type = ""
+                s_term_map = mask_string(s_term_map, row)
 
-            # clean p value
-            p = clean_entry(p)
-            if p_term_type == "iri":
-                p = remove_base_uri(p, base_uri)
+                # Rename inserted values from pandas headline
+                s_term_map = s_term_map.replace("a___", " ")
+                s_term_map = s_term_map.replace("ab____", "\\{")
+                s_term_map = s_term_map.replace("abb_____", "\\}")
+                s_term_map = s_term_map.replace("abbb______", "\\")
 
-            p_term_map = p
-            for key, value in row.items():
-                term_map, term_map_type = get_term_map_type(p_term_map, key, value)
-                if p_term_map_type == "":
-                    p_term_map = term_map
-                    p_term_map_type = term_map_type
-                elif term_map_type != "constant":
-                    p_term_map = term_map
-                    p_term_map_type = term_map_type
+                ## Handle predicate ##
+                p_term_type = get_term_type(p)
+                p_term_map = ""
+                p_term_map_type = ""
 
-            # Rename inserted values from pandas headline
-            p_term_map = p_term_map.replace("a___", " ")
-            p_term_map = p_term_map.replace("ab____", "{")
-            p_term_map = p_term_map.replace("abb_____", "}")
-            p_term_map = p_term_map.replace("abbb______", "\\")
+                # clean p value
+                p = clean_entry(p)
+                if p_term_type == "iri":
+                    p = remove_base_uri(p, base_uri)
 
-            ## Handle object ##
-            o_term_type = get_term_type(o)
-            o_term_map = ""
-            o_term_map_type = ""
+                p_term_map = p
+                for key, value in row.items():
+                    term_map, term_map_type = get_term_map_type(p_term_map, key, value)
+                    if p_term_map_type == "":
+                        p_term_map = term_map
+                        p_term_map_type = term_map_type
+                    elif term_map_type != "constant":
+                        p_term_map = term_map
+                        p_term_map_type = term_map_type
 
-            # clean o value
-            o = clean_entry(o)
-            if o_term_type == "iri":
-                o = remove_base_uri(o, base_uri)
+                # Rename inserted values from pandas headline
+                p_term_map = p_term_map.replace("a___", " ")
+                p_term_map = p_term_map.replace("ab____", "{")
+                p_term_map = p_term_map.replace("abb_____", "}")
+                p_term_map = p_term_map.replace("abbb______", "\\")
 
-            o_term_map = o
-            for key, value in row.items():
-                term_map, term_map_type = get_term_map_type(o_term_map, key, value)
-                if o_term_map_type == "":
-                    o_term_map = term_map
-                    o_term_map_type = term_map_type
-                elif term_map_type != "constant":
-                    o_term_map = term_map
-                    o_term_map_type = term_map_type
+                ## Handle object ##
+                o_term_type = get_term_type(o)
+                o_term_map = ""
+                o_term_map_type = ""
 
-            # Mask string
-            o_term_map = mask_string(o_term_map, row)
+                # clean o value
+                o = clean_entry(o)
+                if o_term_type == "iri":
+                    o = remove_base_uri(o, base_uri)
 
-            # Rename inserted values from pandas headline
-            o_term_map = o_term_map.replace("a___", " ")
-            o_term_map = o_term_map.replace("ab____", "\\\\{")
-            o_term_map = o_term_map.replace("abb_____", "\\\\}")
-            o_term_map = o_term_map.replace("abbb______", "\\")
+                o_term_map = o
+                for key, value in row.items():
+                    term_map, term_map_type = get_term_map_type(o_term_map, key, value)
+                    if o_term_map_type == "":
+                        o_term_map = term_map
+                        o_term_map_type = term_map_type
+                    elif term_map_type != "constant":
+                        o_term_map = term_map
+                        o_term_map_type = term_map_type
 
-            
-            ## Handle graph ##
-            g_term_type = "iri"
-            g_term_map = ""
-            g_term_map_type = ""
+                # Mask string
+                o_term_map = mask_string(o_term_map, row)
 
-            # clean o value
-            g = clean_entry(g)
-            if g_term_type == "iri":
-                g = remove_base_uri(g, base_uri)
-            
-            if g == "":
-                g_term_type = ""
+                # Rename inserted values from pandas headline
+                o_term_map = o_term_map.replace("a___", " ")
+                o_term_map = o_term_map.replace("ab____", "\\\\{")
+                o_term_map = o_term_map.replace("abb_____", "\\\\}")
+                o_term_map = o_term_map.replace("abbb______", "\\")
+
+                
+                ## Handle graph ##
+                g_term_type = "iri"
                 g_term_map = ""
                 g_term_map_type = ""
-            else:
-                g_term_map = g
-                for key, value in row.items():
-                    term_map, term_map_type = get_term_map_type(g_term_map, key, value)
-                    if g_term_map_type == "":
-                        g_term_map = term_map
-                        g_term_map_type = term_map_type
-                    elif term_map_type != "constant":
-                        g_term_map = term_map
-                        g_term_map_type = term_map_type
-            
-            # Rename inserted values from pandas headline
-            g_term_map = g_term_map.replace("a___", " ")
-            g_term_map = g_term_map.replace("ab____", "{")
-            g_term_map = g_term_map.replace("abb_____", "}")
-            g_term_map = g_term_map.replace("abbb______", "\\")
 
-
-            ## Handle datatype ##
-            raw_o_value = element.o
-            # Check for datatype
-            res = raw_o_value.split("^^")
-            if len(res) != 2:
-                data_type_term_type = ""
-                data_type_term_map = ""
-                data_type_term_map_type = ""
-            else:
-                data_type_string = res[1]
-                # clean data_type_string value
-                data_type_string = clean_entry(data_type_string)
-
-                data_type_term_type = "iri"
-                data_type_term_map = ""
-                data_type_term_map_type = ""
-
-                data_type_term_map = data_type_string
-                # Remove xsd schema prefix
-                data_type_term_map = data_type_term_map.replace("http://www.w3.org/2001/XMLSchema#", "|||")
-
-                for key, value in row.items():
-                    term_map, term_map_type = get_term_map_type(data_type_term_map, key, value)
-                    if data_type_term_map_type == "":
-                        data_type_term_map = term_map
-                        data_type_term_map_type = term_map_type
-                    elif term_map_type != "constant":
-                        data_type_term_map = term_map
-                        data_type_term_map_type = term_map_type
+                # clean o value
+                g = clean_entry(g)
+                if g_term_type == "iri":
+                    g = remove_base_uri(g, base_uri)
+                
+                if g == "":
+                    g_term_type = ""
+                    g_term_map = ""
+                    g_term_map_type = ""
+                else:
+                    g_term_map = g
+                    for key, value in row.items():
+                        term_map, term_map_type = get_term_map_type(g_term_map, key, value)
+                        if g_term_map_type == "":
+                            g_term_map = term_map
+                            g_term_map_type = term_map_type
+                        elif term_map_type != "constant":
+                            g_term_map = term_map
+                            g_term_map_type = term_map_type
                 
                 # Rename inserted values from pandas headline
-                data_type_term_map = data_type_term_map.replace("a___", " ")
-                data_type_term_map = data_type_term_map.replace("ab____", "{")
-                data_type_term_map = data_type_term_map.replace("abb_____", "}")
-                data_type_term_map = data_type_term_map.replace("abbb______", "\\")
+                g_term_map = g_term_map.replace("a___", " ")
+                g_term_map = g_term_map.replace("ab____", "{")
+                g_term_map = g_term_map.replace("abb_____", "}")
+                g_term_map = g_term_map.replace("abbb______", "\\")
 
 
-                # Add xsd prefix back
-                data_type_term_map = data_type_term_map.replace("|||", "http://www.w3.org/2001/XMLSchema#")
+                ## Handle datatype ##
+                raw_o_value = element.o
+                # Check for datatype
+                res = raw_o_value.split("^^")
+                if len(res) != 2:
+                    data_type_term_type = ""
+                    data_type_term_map = ""
+                    data_type_term_map_type = ""
+                else:
+                    data_type_string = res[1]
+                    # clean data_type_string value
+                    data_type_string = clean_entry(data_type_string)
 
-            ## Build rml graph ##
-            rml_sub_graph = graph_builder.build_sub_graph(file_path_csv, s_term_map, s_term_map_type, s_term_type,\
-                                                        p_term_map, p_term_map_type, p_term_type, \
-                                                        o_term_map, o_term_map_type, o_term_type, \
-                                                        g_term_type, g_term_map, g_term_map_type, \
-                                                        data_type_term_type, data_type_term_map, data_type_term_map_type)
-            
-            if not isDuplicateGraph(rml_sub_graph, temp_graph_data):
-                temp_graph_data.append(rml_sub_graph)
+                    data_type_term_type = "iri"
+                    data_type_term_map = ""
+                    data_type_term_map_type = ""
 
-        # Filter rules
-        if len(temp_graph_data) > 1:
-            # If more then one rule is generated, take the one that has not only constants
-            for g in temp_graph_data:
-                # data = (new_path, sub, subject_type, pred, predicate_type, obj, object_type)
-                data = extract_information(g)
-                if data[2] == "constant" and \
-                   data[4] == "constant" and \
-                   data[6] == "constant":
-                    continue
-                
-                if not isDuplicateGraph(g, rml_sub_graphs):
-                    rml_sub_graphs.append(g)
+                    data_type_term_map = data_type_string
+                    # Remove xsd schema prefix
+                    data_type_term_map = data_type_term_map.replace("http://www.w3.org/2001/XMLSchema#", "|||")
 
-        elif len(temp_graph_data) == 1:
-            rml_sub_graphs.append(temp_graph_data[0])
+                    for key, value in row.items():
+                        term_map, term_map_type = get_term_map_type(data_type_term_map, key, value)
+                        if data_type_term_map_type == "":
+                            data_type_term_map = term_map
+                            data_type_term_map_type = term_map_type
+                        elif term_map_type != "constant":
+                            data_type_term_map = term_map
+                            data_type_term_map_type = term_map_type
+                    
+                    # Rename inserted values from pandas headline
+                    data_type_term_map = data_type_term_map.replace("a___", " ")
+                    data_type_term_map = data_type_term_map.replace("ab____", "{")
+                    data_type_term_map = data_type_term_map.replace("abb_____", "}")
+                    data_type_term_map = data_type_term_map.replace("abbb______", "\\")
+
+
+                    # Add xsd prefix back
+                    data_type_term_map = data_type_term_map.replace("|||", "http://www.w3.org/2001/XMLSchema#")
+
+                ## Build rml graph ##
+                tmp_rml_sub_graph = graph_builder.build_sub_graph(csv_path, s_term_map, s_term_map_type, s_term_type,\
+                                                            p_term_map, p_term_map_type, p_term_type, \
+                                                            o_term_map, o_term_map_type, o_term_type, \
+                                                            g_term_type, g_term_map, g_term_map_type, \
+                                                            data_type_term_type, data_type_term_map, data_type_term_map_type)
+                if not isDuplicateGraph(tmp_rml_sub_graph, tmp_rml_sub_graphs):
+                    tmp_rml_sub_graphs.append(tmp_rml_sub_graph)
+
+        # Store data
+        stored_data[csv_path] = data
+
+        ### FILTER ###
+        # Extract possible triples
+        possible_triples = []
+        for g in tmp_rml_sub_graphs:
+            info = extract_information(g)
+            res = generate_expected_triple(data, info)
+            possible_triples.append(res)
+
+        filtered_graphs = filter_mappings(possible_triples, tmp_rml_sub_graphs)
+
+        # Print the final filtered graphs
+        for fg in filtered_graphs:
+            rml_sub_graphs.append(fg)
+
+
+    ### Filter combined result of all input files
+    possible_triples = []
+    for g in rml_sub_graphs:
+        info = extract_information(g)
+        data = stored_data[info[0]]
+        res = generate_expected_triple(data, info)
+        possible_triples.append(res)
+
+    filtered_graphs = filter_mappings(possible_triples, rml_sub_graphs)
+    rml_sub_graphs = filtered_graphs
+
+    # Check if all triples are expected
+    filtered_graphs = []
+    for g in rml_sub_graphs:
+        info = extract_information(g)
+        data = stored_data[info[0]]
+        res = generate_expected_triple(data, info)
+
+        cnt_found = 0
+        for entry in res:
+            for rdf in rdf_data:
+                s = clean_entry(rdf.s)
+                p = clean_entry(rdf.p)
+                o = clean_entry(rdf.o)
+
+                # Handle base uri
+                if base_uri in s:
+                    s = s.replace(base_uri, "")
+                if base_uri in p:
+                    p = p.replace(base_uri, "")
+                if base_uri in o:
+                    o = o.replace(base_uri, "")
+
+                comp = f"{s}|{p}|{o}"
+                if comp == entry:
+                    cnt_found+=1
+
+        if len(res) == cnt_found:
+            filtered_graphs.append(g)
+
+    # Final result
+    rml_sub_graphs = filtered_graphs
 
     # Print output
     result_graph = Graph()
@@ -555,8 +722,8 @@ def main():
     RML = Namespace("http://w3id.org/rml/")
     result_graph.bind("rml", RML)
     for rml_sub_graph in rml_sub_graphs:
-        result_graph += rml_sub_graph
-    
+            result_graph += rml_sub_graph
+
     str_result_graph = result_graph.serialize(format="turtle")
     
     # Add base uri if needed

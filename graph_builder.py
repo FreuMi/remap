@@ -96,6 +96,10 @@ def add_predicate_object_map(g: Graph, tm_name: str,\
     g.add((bn1, voc.PREDICATE_MAP, bn2))
     if p_term_map_type == "constant":
         g.add((bn2, voc.CONSTANT, URIRef(p_term_map)))
+    elif p_term_map_type == "reference":
+        g.add((bn2, voc.REFERENCE, URIRef(p_term_map)))
+    elif p_term_map_type == "template":
+        g.add((bn2, voc.TEMPLATE, URIRef(p_term_map)))
     else:
         print("Error: Prediacte term_map_type unsupported! Found", p_term_map_type)
         sys.exit(1)
