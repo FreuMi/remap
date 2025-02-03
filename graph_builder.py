@@ -2,6 +2,7 @@ import vocabulary as voc
 from rdflib import Graph, URIRef, Literal, BNode, Namespace
 from datetime import datetime
 import sys
+import main
 
 # Gernerate a random id based on current time 
 def get_random_id() -> str:
@@ -141,6 +142,40 @@ def add_predicate_object_map(g: Graph, tm_name: str,\
             g.add((bn4, voc.CONSTANT, URIRef(data_type_term_map)))
 
 
+# Add a POM
+def add_predicate_object_map_join(g: Graph, tm_name: str,\
+                            p_term_map: str, p_term_map_type: str, tm2: str, parent: str, child: str) -> None:
+    bn1 = BNode()
+    bn2 = BNode()
+    bn3 = BNode()
+    
+    g.add((URIRef(tm_name), voc.POM, bn1))
+
+    # Predicate
+    g.add((bn1, voc.PREDICATE_MAP, bn2))
+    if p_term_map_type == "constant":
+        g.add((bn2, voc.CONSTANT, URIRef(p_term_map)))
+    elif p_term_map_type == "reference":
+        g.add((bn2, voc.REFERENCE, URIRef(p_term_map)))
+    elif p_term_map_type == "template":
+        g.add((bn2, voc.TEMPLATE, URIRef(p_term_map)))
+    else:
+        print("Error: Prediacte term_map_type unsupported! Found", p_term_map_type)
+        sys.exit(1)
+
+    # Object
+    g.add((bn1, voc.OBJECT_MAP, bn3))
+    g.add((bn3, voc.RDF_TYPE, voc.REF_OBJ_MAP))
+
+    # Add join condition
+    bn5 = BNode()
+    g.add((bn3, voc.JOIN_COND, bn5))
+    g.add((bn5, voc.PARENT, Literal(parent)))
+    g.add((bn5, voc.CHILD, Literal(child)))
+
+    # Add parent tm
+    g.add((bn3, voc.PARENT_TM, URIRef(tm2)))
+
 def build_sub_graph(file_path_csv: str, s_term_map: str, s_term_map_type: str, s_term_type: str,\
                     p_term_map: str, p_term_map_type: str, p_term_type: str,\
                     o_term_map: str, o_term_map_type: str, o_term_type: str,\
@@ -156,5 +191,115 @@ def build_sub_graph(file_path_csv: str, s_term_map: str, s_term_map_type: str, s
     add_logical_source(rml_sub_graph, tm, file_path_csv)
     add_subject(rml_sub_graph, tm, s_term_map, s_term_map_type, s_term_type, g_term_type, g_term_map, g_term_map_type)
     add_predicate_object_map(rml_sub_graph, tm, p_term_map, p_term_map_type, p_term_type, o_term_map, o_term_map_type, o_term_type, data_type_term_type, data_type_term_map, data_type_term_map_type)
+
+    return rml_sub_graph
+
+
+def get_term_type_of_graph(g: Graph, node_type: str):
+    # p is always iri
+    if node_type == "p":
+        return "iri"
+
+    node = ""
+
+    if node_type == "s":
+        # Get subject map node
+        for s,p,o in g:
+            if str(p) == "http://w3id.org/rml/subjectMap":
+                node = str(o)
+                break
+    elif node_type == "p":
+        # Get subject map node
+        for s,p,o in g:
+            if str(p) == "http://w3id.org/rml/predicateMap":
+                node = str(o)
+                break
+    elif node_type == "o":
+        # Get subject map node
+        for s,p,o in g:
+            if str(p) == "http://w3id.org/rml/objectMap":
+                node = str(o)
+                break
+    else:
+        print("Error: got, ", node_type)
+        sys.exit(1)
+
+    # Get termtype
+    term_type = ""
+    for s,p,o in g:
+        if str(p) == "http://w3id.org/rml/termType" and str(s) == node:
+            term_type = str(o)
+            break
+        
+    if term_type == "http://w3id.org/rml/IRI":
+        return "iri"
+    elif term_type == "http://w3id.org/rml/BlankNode":
+        return "blanknode"
+    elif term_type == "http://w3id.org/rml/Literal":
+        return "literal"
+    else:
+        print("Error in get_term_type_graph", term_type)
+        sys.exit(1)
+
+def get_graph(g):
+    # TODO
+    return "", "", ""
+
+
+
+def build_sub_graph_join(g: Graph, g2: Graph) -> Graph:
+    # Generate second part first
+    rml_sub_graph2 = Graph()
+
+    # Set RML namespace
+    RML = Namespace("http://w3id.org/rml/")
+    rml_sub_graph2.bind("rml", RML)
+
+    file_path_csv2 = main.getPath(g2)
+    o_term_map2, o_term_map_type2 = main.getObject(g2)
+    o_term_type2 = get_term_type_of_graph(g2, "o")
+
+    # Init, add subject, and source
+    tm2 = init_template(rml_sub_graph2)
+    add_logical_source(rml_sub_graph2, tm2, file_path_csv2)
+    add_subject(rml_sub_graph2, tm2, o_term_map2, o_term_map_type2, o_term_type2, "", "", "")
+
+    # Generate first part
+    rml_sub_graph = Graph()
+
+    file_path_csv = main.getPath(g)
+
+    s_term_map, s_term_map_type = main.getSubject(g)
+    s_term_type = get_term_type_of_graph(g, "s")
+
+    g_term_type, g_term_map, g_term_map_type = get_graph(g)
+
+    p_term_map, p_term_map_type = main.getPredicate(g)
+
+    o_term_map, o_term_map_type = main.getObject(g)
+
+    # Get child 
+    if o_term_map_type == "template":
+        child = o_term_map.split("{")[-1].split("}")[0]
+    else:
+        print("Error getting child")
+        sys.exit()
+
+    # Get parent
+    if o_term_map_type2 == "template":
+        parent = o_term_map2.split("{")[-1].split("}")[0]
+    else:
+        print("Error getting child")
+        sys.exit()
+
+    tm = init_template(rml_sub_graph)
+    add_logical_source(rml_sub_graph, tm, file_path_csv)
+    add_subject(rml_sub_graph, tm, s_term_map, s_term_map_type, s_term_type, g_term_type, g_term_map, g_term_map_type)
+    add_predicate_object_map_join(rml_sub_graph, tm, p_term_map, p_term_map_type, tm2, parent, child )
+
+    # Combine both graphs
+    res = rml_sub_graph + rml_sub_graph2
+
+    print(res.serialize())
 
     return rml_sub_graph

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import graph_builder
 import re
 import argparse
-import subprocess
+from urllib.parse import urlparse
 
 # Class to store quad data
 @dataclass
@@ -15,17 +15,28 @@ class Quad:
     o: str
     g: str
 
+def is_valid_uri(uri):
+    try:
+        result = urlparse(uri)
+        return all([result.scheme, result.netloc])
+    except ValueError:
+        return False
+
 # Itentify term_map_type of (constant, reference, template) and generate term_map
-def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str) -> tuple[str, str]:
+def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: str) -> tuple[str, str]:
     rdf_term_map_type = ""
     if csv_data not in rdf_term:
         rdf_term_map_type = "constant"
     else:
+        org_csv_data = csv_data
         csv_data = csv_data.replace(rdf_term, "")
-        if csv_data == "":
-            rdf_term_map_type = "reference"
-        elif csv_data != "":
+        if csv_data != "":
             rdf_term_map_type = "template"
+        elif is_valid_uri(base_uri + org_csv_data):
+            rdf_term_map_type = "template"
+            csv_data = org_csv_data
+        elif csv_data == "":
+            rdf_term_map_type = "reference"
         else:
             print("Error detecting term_map_type! Found:", rdf_term_map_type)
             sys.exit(1)
@@ -276,6 +287,18 @@ def extract_information(graph: Graph) -> tuple[str,str,str,str,str,str,str]:
 
     return (new_path, sub, subject_type, pred, predicate_type, obj, object_type)
 
+def extract_information_join(graph: Graph) -> tuple[str,str,str,str,str,str,str]:
+    # Get source path 
+    new_path = getPath(graph)
+    # Get subject
+    sub, subject_type = getSubject(graph)
+    # Get predicate
+    pred, predicate_type = getPredicate(graph)
+    # Get object
+    obj, object_type = getObject(graph)
+
+    return (new_path, sub, subject_type, pred, predicate_type, obj, object_type)
+
 def isDuplicateGraph(graph: Graph, all_graphs: list[Graph]) -> bool:
     reference_info = extract_information(graph)
 
@@ -448,6 +471,17 @@ def filter_mappings(possible_triples: list[set[str]], rml_sub_graphs: list[Graph
 
     return final_graphs
 
+def get_invar(term_map, term_map_type):
+    if term_map_type == "template":
+        return term_map.split("{")[0]
+    elif term_map_type == "constant":
+        return term_map
+    elif term_map_type == "reference":
+        return ""
+    else:
+        print("ERR")
+        sys.exit(1)
+
 def main():
     # Config
     file_path_csv = ""
@@ -482,6 +516,8 @@ def main():
     for csv_path in file_path_csv:
         # Load csv data
         data: pd.DataFrame = pd.read_csv(csv_path, dtype=str)
+        data = data.drop_duplicates()
+        data = data.dropna()
         # Rename cols to remove whitespace
         data.columns = [col.replace(" ", "a___") for col in data.columns]
         # Rename cols to remove {}
@@ -499,6 +535,8 @@ def main():
         # Iterate over all csv data
         for row in data.itertuples(index=False):
             row: dict[str, str] = row._asdict() 
+            # Sort so longer ones are first
+            row = dict(sorted(row.items(), key=lambda item: len(item[1]), reverse=True))
             # Iterate over the graph
             for element in rdf_data:
                 # Access data
@@ -520,14 +558,14 @@ def main():
                 # Iterate over all elements in the row and detect type
                 s_term_map = s
                 for key, value in row.items():
-                    term_map, term_map_type = get_term_map_type(s_term_map, key, value)
+                    term_map, term_map_type = get_term_map_type(s_term_map, key, value, base_uri)
                     if s_term_map_type == "":
                         s_term_map = term_map
                         s_term_map_type = term_map_type
                     elif term_map_type != "constant":
                         s_term_map = term_map
                         s_term_map_type = term_map_type
-
+                
                 s_term_map = mask_string(s_term_map, row)
 
                 # Rename inserted values from pandas headline
@@ -548,7 +586,7 @@ def main():
 
                 p_term_map = p
                 for key, value in row.items():
-                    term_map, term_map_type = get_term_map_type(p_term_map, key, value)
+                    term_map, term_map_type = get_term_map_type(p_term_map, key, value, base_uri)
                     if p_term_map_type == "":
                         p_term_map = term_map
                         p_term_map_type = term_map_type
@@ -574,7 +612,7 @@ def main():
 
                 o_term_map = o
                 for key, value in row.items():
-                    term_map, term_map_type = get_term_map_type(o_term_map, key, value)
+                    term_map, term_map_type = get_term_map_type(o_term_map, key, value, base_uri)
                     if o_term_map_type == "":
                         o_term_map = term_map
                         o_term_map_type = term_map_type
@@ -609,7 +647,7 @@ def main():
                 else:
                     g_term_map = g
                     for key, value in row.items():
-                        term_map, term_map_type = get_term_map_type(g_term_map, key, value)
+                        term_map, term_map_type = get_term_map_type(g_term_map, key, value, base_uri)
                         if g_term_map_type == "":
                             g_term_map = term_map
                             g_term_map_type = term_map_type
@@ -646,7 +684,7 @@ def main():
                     data_type_term_map = data_type_term_map.replace("http://www.w3.org/2001/XMLSchema#", "|||")
 
                     for key, value in row.items():
-                        term_map, term_map_type = get_term_map_type(data_type_term_map, key, value)
+                        term_map, term_map_type = get_term_map_type(data_type_term_map, key, value, base_uri)
                         if data_type_term_map_type == "":
                             data_type_term_map = term_map
                             data_type_term_map_type = term_map_type
@@ -690,6 +728,43 @@ def main():
         for fg in filtered_graphs:
             rml_sub_graphs.append(fg)
 
+    ### Identify joins
+    join_graphs = []
+    for g in rml_sub_graphs:
+        info_g = extract_information(g)
+        print(info_g)
+        # Compare to all other files
+        for g2 in rml_sub_graphs:
+            info_g2 = extract_information(g2)
+            # Do not compare with itself
+            if info_g2 == info_g:
+                continue
+
+            # source files must be different
+            if info_g[0] == info_g2[0]:
+                continue
+
+            # second part must be constant in subject
+            if info_g2[2] != "constant":
+                continue
+            
+            # predicate and prediacte term type must be the same
+            if not (info_g[3] == info_g2[3] and info_g[4] == info_g2[4]):
+                continue
+
+            # object term type must be the same
+            if info_g[6] != info_g2[6]:
+                continue
+
+             # object term map invar must be the same
+            invar_g = get_invar(info_g[5], info_g[6])
+            invar_g2 = get_invar(info_g2[5], info_g2[6])
+            if invar_g != invar_g2:
+                continue
+            
+            # If we arrive here, generate the mapping
+            new_join_graph = graph_builder.build_sub_graph_join(g, g2)
+            join_graphs.append(new_join_graph)
 
     ### Filter combined result of all input files
     possible_triples = []

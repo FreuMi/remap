@@ -23,6 +23,11 @@ PREDICATE_MAP = URIRef("http://w3id.org/rml/predicateMap")
 OBJECT_MAP = URIRef("http://w3id.org/rml/objectMap")
 GRAPH_MAP = URIRef("http://w3id.org/rml/graphMap")
 DATATYPE_MAP = URIRef("http://w3id.org/rml/datatypeMap")
+REF_OBJ_MAP = URIRef("http://w3id.org/rml/RefObjectMap")
+JOIN_COND = URIRef("http://w3id.org/rml/joinCondition")
+CHILD = URIRef("http://w3id.org/rml/child")
+PARENT = URIRef("http://w3id.org/rml/parent")
+PARENT_TM = URIRef("http://w3id.org/rml/parentTriplesMap")
 
 
 IRI = URIRef("http://w3id.org/rml/IRI")
