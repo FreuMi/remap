@@ -298,8 +298,6 @@ def build_sub_graph_join(g: Graph, g2: Graph) -> Graph:
     add_predicate_object_map_join(rml_sub_graph, tm, p_term_map, p_term_map_type, tm2, parent, child )
 
     # Combine both graphs
-    res = rml_sub_graph + rml_sub_graph2
+    #res = rml_sub_graph + rml_sub_graph2
 
-    print(res.serialize())
-
-    return rml_sub_graph
+    return (rml_sub_graph, rml_sub_graph2)

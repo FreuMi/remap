@@ -6,6 +6,7 @@ import graph_builder
 import re
 import argparse
 from urllib.parse import urlparse
+import vocabulary as voc
 
 # Class to store quad data
 @dataclass
@@ -275,7 +276,7 @@ def getObject(graph: Graph) -> tuple[str,str]:
     print("Error in getObject")
     sys.exit(1)
 
-def extract_information(graph: Graph) -> tuple[str,str,str,str,str,str,str]:
+def extract_information(graph: Graph) -> tuple[str,str,str,str,str,str,str, str]:
     # Get source path 
     new_path = getPath(graph)
     # Get subject
@@ -285,19 +286,33 @@ def extract_information(graph: Graph) -> tuple[str,str,str,str,str,str,str]:
     # Get object
     obj, object_type = getObject(graph)
 
-    return (new_path, sub, subject_type, pred, predicate_type, obj, object_type)
+    return (new_path, sub, subject_type, pred, predicate_type, obj, object_type, "")
 
-def extract_information_join(graph: Graph) -> tuple[str,str,str,str,str,str,str]:
+def get_parent(g: Graph) -> str:
+    for s,p,o in g:
+        if p == voc.PARENT:
+            return str(o)
+
+def get_child(g: Graph) -> str:
+    for s,p,o in g:
+        if p == voc.CHILD:
+            return str(o)
+
+def extract_information_join(graph1: Graph, graph2: Graph) -> tuple[str,str,str,str,str,str,str,str]:
     # Get source path 
-    new_path = getPath(graph)
+    new_path = getPath(graph1)
+    new_path2 = getPath(graph2)
     # Get subject
-    sub, subject_type = getSubject(graph)
+    sub, subject_type = getSubject(graph1)
     # Get predicate
-    pred, predicate_type = getPredicate(graph)
+    pred, predicate_type = getPredicate(graph1)
     # Get object
-    obj, object_type = getObject(graph)
+    obj, object_type = getSubject(graph2)
 
-    return (new_path, sub, subject_type, pred, predicate_type, obj, object_type)
+    child = get_child(graph1)
+    parent = get_parent(graph1)
+
+    return (new_path, sub, subject_type, pred, predicate_type, obj, object_type, new_path2, child, parent)
 
 def isDuplicateGraph(graph: Graph, all_graphs: list[Graph]) -> bool:
     reference_info = extract_information(graph)
@@ -334,10 +349,130 @@ def mask_string(input_data: str, row: dict[str, str]) -> str:
     return tmp_input_data
 
 # Generate expected triple
-def generate_expected_triple(data: pd.DataFrame, info) -> set[str]:
+def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.DataFrame()) -> set[str]:
     # Generate data
     generated_triples = set()
 
+    ### With Join ###
+    if info[7] != "":
+        ## Perform Join ##
+        # Rename columns
+        data = data.rename(columns=lambda col: f"{info[0].replace(".","")}_{col}")
+        data2 = data2.rename(columns=lambda col: f"{info[7].replace(".","")}_{col}")
+        
+        child = f"{info[0].replace(".","")}_{info[8]}"
+        parent = f"{info[7].replace(".","")}_{info[9]}"
+
+        # Perform join
+        join_result_df = pd.merge(
+            data,
+            data2,
+            left_on=child,
+            right_on=parent,
+            suffixes=("_RxPxx", "_SxPxx"),
+        )
+
+        # Iterate over data
+        for row in join_result_df.itertuples(index=False):
+            row: dict[str, str] = row._asdict()
+            
+            s = ""
+            p = ""
+            o = ""
+
+            # Subject
+            if info[2] == "constant":
+                s = info[1]
+            elif info[2] == "reference":
+                key = info[1]
+                key = key.replace(" ", "a___")
+                key = key.replace("{", "ab____")
+                key = key.replace("}", "abb_____")
+                key = key.replace("\\", "abbb______")
+                s = row[key]
+            elif info[2] == "template":
+                # Get template refernces
+                matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[1])
+                s = info[1]
+                for match in matches:
+                    match_org = match
+                    match = match.replace(" ", "a___")
+                    match = match.replace("{", "ab____")
+                    match = match.replace("}", "abb_____")
+                    match = match.replace("\\", "abbb______")
+                    match = f"{info[0].replace(".","")}_{match}"
+
+                    s = s.replace("{"+match_org+"}", row[match])
+
+            s = s.replace("a___", " ")
+            s = s.replace("ab____", "\\{")
+            s = s.replace("abb_____", "\\}")
+            s = s.replace("abbb______", "\\")
+
+            if info[4] == "constant":
+                p = info[3]
+            elif info[4] == "reference":
+                key = info[3]
+                key = key.replace(" ", "a___")
+                key = key.replace("{", "ab____")
+                key = key.replace("}", "abb_____")
+                key = key.replace("\\", "abbb______")
+                p = row[key]
+            elif info[4] == "template":
+                # Get template refernces
+                matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[3])
+                p = info[3]
+                for match in matches:
+                    match_org = match
+                    match = match.replace(" ", "a___")
+                    match = match.replace("{", "ab____")
+                    match = match.replace("}", "abb_____")
+                    match = match.replace("\\", "abbb______")
+                    p = p.replace("{"+match_org+"}", row[match])
+            
+            p = p.replace("a___", " ")
+            p = p.replace("ab____", "\\{")
+            p = p.replace("abb_____", "\\}")
+            p = p.replace("abbb______", "\\")
+
+            if info[6] == "constant":
+                o = info[5]
+            elif info[6] == "reference":
+                key = info[5]
+                key = key.replace(" ", "a___")
+                key = key.replace("{", "ab____")
+                key = key.replace("}", "abb_____")
+                key = key.replace("\\", "abbb______")
+                o = row[key]
+            elif info[6] == "template":
+                # Get template refernces
+                matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[5])
+                o = info[5]
+                for match in matches:
+                    match_org = match
+                    match = match.replace(" ", "a___")
+                    match = match.replace("{", "ab____")
+                    match = match.replace("}", "abb_____")
+                    match = match.replace("\\", "abbb______")
+                    match = f"{info[7].replace(".","")}_{match}"
+
+                    o = o.replace("{"+match_org+"}", row[match])
+
+
+            o = o.replace("a___", " ")
+            o = o.replace("ab____", "\\{")
+            o = o.replace("abb_____", "\\}")
+            o = o.replace("abbb______", "\\")
+
+            # Early exit if not valid
+            #if "None" in f"{s}|{p}|{o}":
+                #return set()
+
+            generated_triples.add(f"{s}|{p}|{o}")
+
+        return generated_triples 
+
+    ### Without Join ###
     for row in data.itertuples(index=False):
         row: dict[str, str] = row._asdict() 
         s = ""
@@ -423,6 +558,10 @@ def generate_expected_triple(data: pd.DataFrame, info) -> set[str]:
         o = o.replace("ab____", "\\{")
         o = o.replace("abb_____", "\\}")
         o = o.replace("abbb______", "\\")
+
+        # Early exit if not valid
+        #if "None" in f"{s}|{p}|{o}":
+            #return set()
 
         generated_triples.add(f"{s}|{p}|{o}")
 
@@ -516,8 +655,8 @@ def main():
     for csv_path in file_path_csv:
         # Load csv data
         data: pd.DataFrame = pd.read_csv(csv_path, dtype=str)
-        data = data.drop_duplicates()
-        data = data.dropna()
+        data = data.fillna("None")
+
         # Rename cols to remove whitespace
         data.columns = [col.replace(" ", "a___") for col in data.columns]
         # Rename cols to remove {}
@@ -721,7 +860,6 @@ def main():
             info = extract_information(g)
             res = generate_expected_triple(data, info)
             possible_triples.append(res)
-
         filtered_graphs = filter_mappings(possible_triples, tmp_rml_sub_graphs)
 
         # Print the final filtered graphs
@@ -732,7 +870,6 @@ def main():
     join_graphs = []
     for g in rml_sub_graphs:
         info_g = extract_information(g)
-        print(info_g)
         # Compare to all other files
         for g2 in rml_sub_graphs:
             info_g2 = extract_information(g2)
@@ -767,17 +904,44 @@ def main():
             join_graphs.append(new_join_graph)
 
     ### Filter combined result of all input files
+    # Prepare data
     possible_triples = []
+    new_graphs = []
     for g in rml_sub_graphs:
         info = extract_information(g)
         data = stored_data[info[0]]
         res = generate_expected_triple(data, info)
+        add = True
+        for element in res:
+            if "None" in element:
+                add = False
+        if add == False:
+            continue
         possible_triples.append(res)
+        new_graphs.append(g)
+
+    # Prepare joins 
+    for g1, g2 in join_graphs:
+        info = extract_information_join(g1,g2)
+        data = stored_data[info[0]]
+        data2 = stored_data[info[7]]
+        res = generate_expected_triple(data, info, data2)
+        # Add to original data
+        rml_sub_graphs.append(g1 + g2)
+        possible_triples.append(res)
+
+    for g in rml_sub_graphs:
+        print("=====")
+        print(g.serialize())
+
+    print("FINNN")
 
     filtered_graphs = filter_mappings(possible_triples, rml_sub_graphs)
     rml_sub_graphs = filtered_graphs
-    for rml_sub_graph in rml_sub_graphs:
-        info = extract_information(rml_sub_graph)
+
+    for g in rml_sub_graphs:
+        print("=====")
+        print(g.serialize())
 
     # Check if all triples are expected
     filtered_graphs = []
