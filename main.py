@@ -16,6 +16,15 @@ class Quad:
     o: str
     g: str
 
+def check_protected_iris(iri: str) -> tuple[bool, str, str]:
+    protected_iris = ["http://www.w3.org/2000/01/rdf-schema#", "http://w3id.org/rml/", "http://www.w3.org/2001/XMLSchema#" ]
+    	
+    for protected_iri in protected_iris:
+        if protected_iri in iri:
+            res = iri.replace(protected_iri,"")
+            return True, res, protected_iri
+    return False, "", ""
+
 def is_valid_uri(uri):
     try:
         result = urlparse(uri)
@@ -26,11 +35,19 @@ def is_valid_uri(uri):
 # Itentify term_map_type of (constant, reference, template) and generate term_map
 def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: str) -> tuple[str, str]:
     rdf_term_map_type = ""
+
+    # Check for protected iri
+    is_protected, rest_iri, protected_prefix = check_protected_iris(rdf_term)
+
+    if is_protected:
+        rdf_term = rest_iri
+
     if csv_data not in rdf_term:
         rdf_term_map_type = "constant"
     else:
         org_csv_data = csv_data
         csv_data = csv_data.replace(rdf_term, "")
+
         if csv_data != "":
             rdf_term_map_type = "template"
         elif is_valid_uri(base_uri + org_csv_data):
@@ -41,6 +58,9 @@ def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: s
         else:
             print("Error detecting term_map_type! Found:", rdf_term_map_type)
             sys.exit(1)
+
+    if is_protected:
+        rdf_term = protected_prefix + rest_iri
 
     term_map = ""
     if rdf_term_map_type == "constant":
@@ -357,11 +377,11 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
     if info[7] != "":
         ## Perform Join ##
         # Rename columns
-        data = data.rename(columns=lambda col: f"{info[0].replace(".","")}_{col}")
-        data2 = data2.rename(columns=lambda col: f"{info[7].replace(".","")}_{col}")
+        data = data.rename(columns=lambda col: f"{info[0].replace('.','')}_{col}")
+        data2 = data2.rename(columns=lambda col: f"{info[7].replace('.','')}_{col}")
         
-        child = f"{info[0].replace(".","")}_{info[8]}"
-        parent = f"{info[7].replace(".","")}_{info[9]}"
+        child = f"{info[0].replace('.','')}_{info[8]}"
+        parent = f"{info[7].replace('.','')}_{info[9]}"
 
         # Perform join
         join_result_df = pd.merge(
@@ -400,7 +420,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                     match = match.replace("{", "ab____")
                     match = match.replace("}", "abb_____")
                     match = match.replace("\\", "abbb______")
-                    match = f"{info[0].replace(".","")}_{match}"
+                    match = f"{info[0].replace('.','')}_{match}"
 
                     s = s.replace("{"+match_org+"}", row[match])
 
@@ -454,7 +474,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                     match = match.replace("{", "ab____")
                     match = match.replace("}", "abb_____")
                     match = match.replace("\\", "abbb______")
-                    match = f"{info[7].replace(".","")}_{match}"
+                    match = f"{info[7].replace('.','')}_{match}"
 
                     o = o.replace("{"+match_org+"}", row[match])
 
