@@ -32,6 +32,22 @@ def is_valid_uri(uri):
     except ValueError:
         return False
 
+def remove_graph(reference_g: Graph, graphs: list[Graph]) -> list[Graph]:
+    new_graphs = []
+    for g in graphs:
+        # Are graphs identical?
+        if g.isomorphic(reference_g):
+            continue
+        new_graphs.append(g)
+
+    return new_graphs
+
+def is_join_graph(g):
+    for s,p,o in g:
+        if o == voc.REF_OBJ_MAP:
+            return True
+    return False
+
 # Itentify term_map_type of (constant, reference, template) and generate term_map
 def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: str) -> tuple[str, str]:
     rdf_term_map_type = ""
@@ -489,7 +505,6 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 #return set()
 
             generated_triples.add(f"{s}|{p}|{o}")
-
         return generated_triples 
 
     ### Without Join ###
@@ -888,6 +903,7 @@ def main():
 
     ### Identify joins
     join_graphs = []
+    graphs_to_remove = []
     for g in rml_sub_graphs:
         info_g = extract_information(g)
         # Compare to all other files
@@ -922,6 +938,12 @@ def main():
             # If we arrive here, generate the mapping
             new_join_graph = graph_builder.build_sub_graph_join(g, g2)
             join_graphs.append(new_join_graph)
+            graphs_to_remove.append(g)
+            graphs_to_remove.append(g2)
+            
+    # Remvoe graphs that are used in join
+    for g in graphs_to_remove:
+        rml_sub_graphs = remove_graph(g, rml_sub_graphs)
 
     ### Filter combined result of all input files
     # Prepare data
@@ -939,36 +961,68 @@ def main():
             continue
         possible_triples.append(res)
         new_graphs.append(g)
+    rml_sub_graphs = new_graphs
 
     # Prepare joins 
     for g1, g2 in join_graphs:
+        print("IN JOIN")
         info = extract_information_join(g1,g2)
         data = stored_data[info[0]]
         data2 = stored_data[info[7]]
         res = generate_expected_triple(data, info, data2)
         # Add to original data
-        rml_sub_graphs.append(g1 + g2)
+        g = g1 + g2
+        rml_sub_graphs.append(g)
         possible_triples.append(res)
 
-    for g in rml_sub_graphs:
-        print("=====")
+
+    print("VOR FILTERUNG")
+    print(len(rml_sub_graphs), len(possible_triples))
+    for i in range(len(rml_sub_graphs)):
+        g = rml_sub_graphs[i]
+        t = possible_triples[i]
         print(g.serialize())
+        print(t)
+        print("=======")
+    print("((((((((((((()))))))))))))")
 
-    print("FINNN")
-
+    # Filter data
     filtered_graphs = filter_mappings(possible_triples, rml_sub_graphs)
     rml_sub_graphs = filtered_graphs
 
+    print("NACH FILTERUNG")
     for g in rml_sub_graphs:
-        print("=====")
         print(g.serialize())
+        print("=======")
+    print("((((((((((((()))))))))))))")
 
     # Check if all triples are expected
     filtered_graphs = []
     for g in rml_sub_graphs:
-        info = extract_information(g)
-        data = stored_data[info[0]]
-        res = generate_expected_triple(data, info)
+        if not is_join_graph(g):
+            info = extract_information(g)
+            data = stored_data[info[0]]
+            res = generate_expected_triple(data, info)
+        else:
+            # Identify graphs pairs
+            g1 = None
+            g2 = None
+            for g1_ref, g2_ref in join_graphs:
+                g_ref = g1_ref + g2_ref
+                if g_ref.isomorphic(g):
+                    g1 = g1_ref
+                    g2 = g2_ref
+                    break
+
+            if g1 == None and g2 == None:
+                print("Error in separating graphs!")
+                sys.exit(1)
+            
+            info = extract_information_join(g1,g2)
+            data = stored_data[info[0]]
+            data2 = stored_data[info[7]]
+            
+            res = generate_expected_triple(data, info, data2)
 
         cnt_found = 0
         for entry in res:
@@ -991,7 +1045,6 @@ def main():
 
         if len(res) == cnt_found:
             filtered_graphs.append(g)
-
     # Final result
     rml_sub_graphs = filtered_graphs
 
