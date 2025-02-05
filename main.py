@@ -1,11 +1,11 @@
 import pandas as pd
-from rdflib import Graph, Namespace
+from rdflib import Graph, Namespace, URIRef
 import sys
 from dataclasses import dataclass
 import graph_builder
 import re
 import argparse
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 import vocabulary as voc
 
 # Class to store quad data
@@ -15,6 +15,15 @@ class Quad:
     p: str
     o: str
     g: str
+
+def encode_uris(graph):
+    updated_graph = Graph()
+    for s, p, o in graph:
+        # Encode only if the subject or object is a URI
+        s = URIRef(quote(str(s), safe=":/#")) if isinstance(s, URIRef) else s
+        o = URIRef(quote(str(o), safe=":/#")) if isinstance(o, URIRef) else o
+        updated_graph.add((s, p, o))
+    return updated_graph
 
 def check_protected_iris(iri: str) -> tuple[bool, str, str]:
     protected_iris = ["http://www.w3.org/2000/01/rdf-schema#", "http://w3id.org/rml/", "http://www.w3.org/2001/XMLSchema#" ]
@@ -408,6 +417,13 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             suffixes=("_RxPxx", "_SxPxx"),
         )
 
+        if info[0] == info[7]:
+            # Handle self join
+            columns_to_drop = [col for col in join_result_df.columns if col.endswith("_SxPxx")]
+            simplified_df = join_result_df.drop(columns=columns_to_drop)
+            simplified_df.columns = [col.replace("_RxPxx", "") for col in simplified_df.columns]
+            join_result_df = simplified_df
+
         # Iterate over data
         for row in join_result_df.itertuples(index=False):
             row: dict[str, str] = row._asdict()
@@ -437,7 +453,6 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                     match = match.replace("}", "abb_____")
                     match = match.replace("\\", "abbb______")
                     match = f"{info[0].replace('.','')}_{match}"
-
                     s = s.replace("{"+match_org+"}", row[match])
 
             s = s.replace("a___", " ")
@@ -914,8 +929,8 @@ def main():
                 continue
 
             # source files must be different
-            if info_g[0] == info_g2[0]:
-                continue
+            #if info_g[0] == info_g2[0]:
+                #continue
 
             # second part must be constant in subject
             if info_g2[2] != "constant":
@@ -929,7 +944,11 @@ def main():
             if info_g[6] != info_g2[6]:
                 continue
 
-             # object term map invar must be the same
+            # Object map can not be constant
+            if info_g[6] == "constant" or info_g2[6] == "constant":
+                continue
+
+            # object term map invar must be the same
             invar_g = get_invar(info_g[5], info_g[6])
             invar_g2 = get_invar(info_g2[5], info_g2[6])
             if invar_g != invar_g2:
@@ -965,7 +984,6 @@ def main():
 
     # Prepare joins 
     for g1, g2 in join_graphs:
-        print("IN JOIN")
         info = extract_information_join(g1,g2)
         data = stored_data[info[0]]
         data2 = stored_data[info[7]]
@@ -975,26 +993,18 @@ def main():
         rml_sub_graphs.append(g)
         possible_triples.append(res)
 
-
-    print("VOR FILTERUNG")
-    print(len(rml_sub_graphs), len(possible_triples))
-    for i in range(len(rml_sub_graphs)):
-        g = rml_sub_graphs[i]
-        t = possible_triples[i]
-        print(g.serialize())
-        print(t)
-        print("=======")
-    print("((((((((((((()))))))))))))")
-
     # Filter data
     filtered_graphs = filter_mappings(possible_triples, rml_sub_graphs)
     rml_sub_graphs = filtered_graphs
 
-    print("NACH FILTERUNG")
-    for g in rml_sub_graphs:
+    for i in range(len(rml_sub_graphs)):
+        g = rml_sub_graphs[i]
+        t = possible_triples[i]
+
+        g = encode_uris(g)
         print(g.serialize())
-        print("=======")
-    print("((((((((((((()))))))))))))")
+        print(t)
+        print("=====")
 
     # Check if all triples are expected
     filtered_graphs = []

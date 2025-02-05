@@ -283,14 +283,14 @@ def build_sub_graph_join(g: Graph, g2: Graph) -> Graph:
         child = o_term_map.split("{")[-1].split("}")[0]
     else:
         print("Error getting child")
-        sys.exit()
+        sys.exit(1)
 
     # Get parent
     if o_term_map_type2 == "template":
         parent = o_term_map2.split("{")[-1].split("}")[0]
     else:
         print("Error getting child")
-        sys.exit()
+        sys.exit(1)
 
     tm = init_template(rml_sub_graph)
     add_logical_source(rml_sub_graph, tm, file_path_csv)
@@ -298,6 +298,6 @@ def build_sub_graph_join(g: Graph, g2: Graph) -> Graph:
     add_predicate_object_map_join(rml_sub_graph, tm, p_term_map, p_term_map_type, tm2, parent, child )
 
     # Combine both graphs
-    #res = rml_sub_graph + rml_sub_graph2
+    # res = rml_sub_graph + rml_sub_graph2
 
     return (rml_sub_graph, rml_sub_graph2)

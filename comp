@@ -21,8 +21,8 @@ RMLTC0007h-CSV: not applicable
 RMLTC0008a-CSV: ok
 RMLTC0008b-CSV: ok (ReferenceObjectMap not reversible)
 RMLTC0008c-CSV: ok
-RMLTC0009a-CSV: TODO: Join
-RMLTC0009b-CSV: TODO: Join
+RMLTC0009a-CSV: ok
+RMLTC0009b-CSV: TODO: Join + multiple graphs
 RMLTC0010a-CSV: ok
 RMLTC0010b-CSV: ok
 RMLTC0010c-CSV: ok
