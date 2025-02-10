@@ -425,8 +425,12 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             join_result_df = simplified_df
 
         # Iterate over data
-        for row in join_result_df.itertuples(index=False):
-            row: dict[str, str] = row._asdict()
+        print(join_result_df)
+
+        for _, row in join_result_df.iterrows():
+            row_dict = row.to_dict()
+            print(row_dict)
+
             
             s = ""
             p = ""
@@ -447,6 +451,8 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[1])
                 s = info[1]
                 for match in matches:
+                    print("MATCH", match)
+                    print("ROW", row)
                     match_org = match
                     match = match.replace(" ", "a___")
                     match = match.replace("{", "ab____")
@@ -523,8 +529,8 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
         return generated_triples 
 
     ### Without Join ###
-    for row in data.itertuples(index=False):
-        row: dict[str, str] = row._asdict() 
+    for _, row in data.iterrows():
+        row_dict = row.to_dict()
         s = ""
         p = ""
         o = ""
@@ -722,8 +728,8 @@ def main():
         tmp_rml_sub_graphs = []
 
         # Iterate over all csv data
-        for row in data.itertuples(index=False):
-            row: dict[str, str] = row._asdict() 
+        for _, row in data.iterrows():
+            row = row.to_dict()
             # Sort so longer ones are first
             row = dict(sorted(row.items(), key=lambda item: len(item[1]), reverse=True))
             # Iterate over the graph

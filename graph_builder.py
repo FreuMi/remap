@@ -3,6 +3,7 @@ from rdflib import Graph, URIRef, Literal, BNode, Namespace
 from datetime import datetime
 import sys
 import main
+import join_identification
 
 # Gernerate a random id based on current time 
 def get_random_id() -> str:
@@ -278,19 +279,8 @@ def build_sub_graph_join(g: Graph, g2: Graph) -> Graph:
 
     o_term_map, o_term_map_type = main.getObject(g)
 
-    # Get child 
-    if o_term_map_type == "template":
-        child = o_term_map.split("{")[-1].split("}")[0]
-    else:
-        print("Error getting child")
-        sys.exit(1)
-
-    # Get parent
-    if o_term_map_type2 == "template":
-        parent = o_term_map2.split("{")[-1].split("}")[0]
-    else:
-        print("Error getting child")
-        sys.exit(1)
+    # Get child and parents 
+    child, parent = join_identification.identify_join(file_path_csv, file_path_csv2)
 
     tm = init_template(rml_sub_graph)
     add_logical_source(rml_sub_graph, tm, file_path_csv)

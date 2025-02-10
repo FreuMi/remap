@@ -60,6 +60,8 @@ folders = get_folder_names(directory)
 total_cnt = len(folders)
 
 for folder in folders:
+    if "CSV" not in folder:
+        continue
     print(f"Working on {folder}...")
     all_files = os.listdir(f'{directory}{folder}')
     
@@ -73,7 +75,12 @@ for folder in folders:
             rdf_file = file
 
     csv_file_strs = [f'{directory}{folder}/{csv_file}' for csv_file in csv_files]
-    
+
+    # Clear output
+    with open("res.nq", "w") as file:
+        pass
+
+
     rdf_file_refernce = f'{directory}{folder}/output.nq'
     command = ['python3', 'main.py', '--csv'] + csv_file_strs + ["--rdf", f'{directory}{folder}/{rdf_file}']
     run_console_program(command)
