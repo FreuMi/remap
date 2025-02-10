@@ -72,9 +72,11 @@ def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: s
     else:
         org_csv_data = csv_data
         csv_data = csv_data.replace(rdf_term, "")
-
         if csv_data != "":
             rdf_term_map_type = "template"
+        elif is_valid_uri(org_csv_data):
+            rdf_term_map_type = "reference"
+            csv_data = org_csv_data
         elif is_valid_uri(base_uri + org_csv_data):
             rdf_term_map_type = "template"
             csv_data = org_csv_data
@@ -83,7 +85,7 @@ def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: s
         else:
             print("Error detecting term_map_type! Found:", rdf_term_map_type)
             sys.exit(1)
-
+        print(rdf_term_map_type)
     if is_protected:
         rdf_term = protected_prefix + rest_iri
 
@@ -425,13 +427,8 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             join_result_df = simplified_df
 
         # Iterate over data
-        print(join_result_df)
-
         for _, row in join_result_df.iterrows():
-            row_dict = row.to_dict()
-            print(row_dict)
-
-            
+            row = row.to_dict()          
             s = ""
             p = ""
             o = ""
@@ -451,8 +448,6 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[1])
                 s = info[1]
                 for match in matches:
-                    print("MATCH", match)
-                    print("ROW", row)
                     match_org = match
                     match = match.replace(" ", "a___")
                     match = match.replace("{", "ab____")
@@ -530,7 +525,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
 
     ### Without Join ###
     for _, row in data.iterrows():
-        row_dict = row.to_dict()
+        row = row.to_dict()
         s = ""
         p = ""
         o = ""
@@ -760,7 +755,6 @@ def main():
                     elif term_map_type != "constant":
                         s_term_map = term_map
                         s_term_map_type = term_map_type
-                
                 s_term_map = mask_string(s_term_map, row)
 
                 # Rename inserted values from pandas headline
@@ -916,6 +910,59 @@ def main():
             info = extract_information(g)
             res = generate_expected_triple(data, info)
             possible_triples.append(res)
+
+        ############# TODO: Funciton prioritize template #########################
+        graphs_to_delete = []
+        # check for similiar mappings where difference is only subject
+        for i in range(len(possible_triples)):
+            g = tmp_rml_sub_graphs[i]
+            info = extract_information(g)
+            possible_triple = possible_triples[i]  
+
+            for j in range(len(possible_triples)):
+                g_2 = tmp_rml_sub_graphs[j]
+                # Skip the same element
+                if g.isomorphic(g_2):
+                    continue
+                info_2 = extract_information(g_2)
+                possible_triple_2 = possible_triples[j] 
+
+                if possible_triple != possible_triple_2:
+                    continue
+
+                if not(info[2] == "template" and info_2[2] == "reference"):
+                    continue
+
+                # must be equivalent to a reference
+                if not(info[1][0] == "{" and info[1][-1] == "}"):
+                    continue
+
+                info = list(info)
+                del info[2]
+                info[1] = info[1].split("{")[1].split("}")[0]
+
+                info_2 = list(info_2)
+                del info_2[2]
+
+                if not(info == info_2):
+                    continue
+                
+                graphs_to_delete.append(g_2)                  
+
+        index_to_remove = []
+        for g in graphs_to_delete:
+            for i in range(len(tmp_rml_sub_graphs)):
+                graph = tmp_rml_sub_graphs[i]
+                if not g.isomorphic(graph):
+                    continue
+                index_to_remove.append(i)
+
+        for i in index_to_remove:
+            del tmp_rml_sub_graphs[i]
+            del possible_triples[i]
+
+        #####################################################
+
         filtered_graphs = filter_mappings(possible_triples, tmp_rml_sub_graphs)
 
         # Print the final filtered graphs
@@ -1003,15 +1050,6 @@ def main():
     filtered_graphs = filter_mappings(possible_triples, rml_sub_graphs)
     rml_sub_graphs = filtered_graphs
 
-    for i in range(len(rml_sub_graphs)):
-        g = rml_sub_graphs[i]
-        t = possible_triples[i]
-
-        g = encode_uris(g)
-        print(g.serialize())
-        print(t)
-        print("=====")
-
     # Check if all triples are expected
     filtered_graphs = []
     for g in rml_sub_graphs:
@@ -1071,7 +1109,7 @@ def main():
     result_graph.bind("rml", RML)
     for rml_sub_graph in rml_sub_graphs:
             result_graph += rml_sub_graph
-
+    
     str_result_graph = result_graph.serialize(format="turtle")
     
     # Add base uri if needed
