@@ -391,7 +391,6 @@ def extract_information_join(graph1: Graph, graph2: Graph) -> tuple[str,str,str,
     obj, object_type = getSubject(graph2)
     # Get graph
     gra, graph_type = getGraph(graph1)
-
     child = get_child(graph1)
     parent = get_parent(graph1)
 
@@ -467,6 +466,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             s = ""
             p = ""
             o = ""
+            g = ""
 
             # Subject
             if info[2] == "constant":
@@ -550,38 +550,37 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             o = o.replace("ab____", "\\{")
             o = o.replace("abb_____", "\\}")
             o = o.replace("abbb______", "\\")
-
+            
             # Handle graph
-            if info[6] == "constant":
-                o = info[5]
-            elif info[6] == "reference":
-                key = info[5]
+            if info[8] == "constant":
+                g = info[7]
+            elif info[8] == "reference":
+                key = info[7]
                 key = key.replace(" ", "a___")
                 key = key.replace("{", "ab____")
                 key = key.replace("}", "abb_____")
                 key = key.replace("\\", "abbb______")
-                o = row[key]
-            elif info[6] == "template":
+                g = row[key]
+            elif info[8] == "template":
                 # Get template refernces
-                matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[5])
-                o = info[5]
+                matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[7])
+                g = info[7]
                 for match in matches:
                     match_org = match
                     match = match.replace(" ", "a___")
                     match = match.replace("{", "ab____")
                     match = match.replace("}", "abb_____")
                     match = match.replace("\\", "abbb______")
-                    match = f"{info[9].replace('.','')}_{match}"
+                    g = g.replace("{"+match_org+"}", row[match])
 
-                    o = o.replace("{"+match_org+"}", row[match])
+            g = g.replace("a___", " ")
+            g = g.replace("ab____", "\\{")
+            g = g.replace("abb_____", "\\}")
+            g = g.replace("abbb______", "\\")
+            g = g.replace(r"\\{", "{")
+            g = g.replace(r"\\}", "}")
 
-
-            o = o.replace("a___", " ")
-            o = o.replace("ab____", "\\{")
-            o = o.replace("abb_____", "\\}")
-            o = o.replace("abbb______", "\\")
-
-            generated_triples.add(f"{s}|{p}|{o}")
+            generated_triples.add(f"{s}|{p}|{o}|{g}")
         return generated_triples 
 
     ### Without Join ###
@@ -590,6 +589,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
         s = ""
         p = ""
         o = ""
+        g = ""
 
         # Subject
         if info[2] == "constant":
@@ -673,7 +673,35 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
         o = o.replace(r"\\{", "{")
         o = o.replace(r"\\}", "}")
 
-        generated_triples.add(f"{s}|{p}|{o}")
+        if info[8] == "constant":
+            g = info[7]
+        elif info[8] == "reference":
+            key = info[7]
+            key = key.replace(" ", "a___")
+            key = key.replace("{", "ab____")
+            key = key.replace("}", "abb_____")
+            key = key.replace("\\", "abbb______")
+            g = row[key]
+        elif info[8] == "template":
+            # Get template refernces
+            matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[7])
+            g = info[7]
+            for match in matches:
+                match_org = match
+                match = match.replace(" ", "a___")
+                match = match.replace("{", "ab____")
+                match = match.replace("}", "abb_____")
+                match = match.replace("\\", "abbb______")
+                g = g.replace("{"+match_org+"}", row[match])
+
+        g = g.replace("a___", " ")
+        g = g.replace("ab____", "\\{")
+        g = g.replace("abb_____", "\\}")
+        g = g.replace("abbb______", "\\")
+        g = g.replace(r"\\{", "{")
+        g = g.replace(r"\\}", "}")
+
+        generated_triples.add(f"{s}|{p}|{o}|{g}")
 
 
     return generated_triples
@@ -1135,10 +1163,11 @@ def main():
 
     # Check if all triples are expected
     filtered_graphs = []
-    for g in rml_sub_graphs:
+
+    for sub_g in rml_sub_graphs:
         x = False
-        if not is_join_graph(g):
-            info = extract_information(g)
+        if not is_join_graph(sub_g):
+            info = extract_information(sub_g)
             data = stored_data[info[0]]
             res = generate_expected_triple(data, info)
         else:
@@ -1147,11 +1176,10 @@ def main():
             g2 = None
             for g1_ref, g2_ref in join_graphs:
                 g_ref = g1_ref + g2_ref
-                if g_ref.isomorphic(g):
+                if g_ref.isomorphic(sub_g):
                     g1 = g1_ref
                     g2 = g2_ref
                     break
-
             if g1 == None and g2 == None:
                 print("Error in separating graphs!")
                 sys.exit(1)
@@ -1169,6 +1197,7 @@ def main():
                 s = clean_entry(rdf.s)
                 p = clean_entry(rdf.p)
                 o = clean_entry(rdf.o)
+                g = clean_entry(rdf.g)
 
                 # Handle base uri
                 if base_uri in s:
@@ -1178,15 +1207,14 @@ def main():
                 if base_uri in o:
                     o = o.replace(base_uri, "")
 
-                comp = f"{s}|{p}|{o}"
+                comp = f"{s}|{p}|{o}|{g}"
                 if comp == entry:
                     cnt_found+=1
-        if x:
-            print(len(res), cnt_found)
+
+        print(len(res), cnt_found)
         if len(res) == cnt_found:
-            if x:
-                print("Added")
-            filtered_graphs.append(g)
+            print("Added")
+            filtered_graphs.append(sub_g)
     # Final result
     rml_sub_graphs = filtered_graphs
 
