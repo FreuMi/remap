@@ -87,7 +87,8 @@ def add_subject(g: Graph, tm_name: str, term_map: str, term_map_type: str, term_
 def add_predicate_object_map(g: Graph, tm_name: str,\
                             p_term_map: str, p_term_map_type: str, p_term_type: str,\
                             o_term_map: str, o_term_map_type: str, o_term_type: str, \
-                            data_type_term_type: str, data_type_term_map: str, data_type_term_map_type: str) -> None:
+                            data_type_term_type: str, data_type_term_map: str, data_type_term_map_type: str,\
+                            lang_tag_term_type: str, lang_tag_term_map: str, lang_tag_term_map_type: str) -> None:
     bn1 = BNode()
     bn2 = BNode()
     bn3 = BNode()
@@ -141,6 +142,11 @@ def add_predicate_object_map(g: Graph, tm_name: str,\
             g.add((bn4, voc.TEMPLATE, Literal(data_type_term_map)))
         elif data_type_term_map_type == "constant":
             g.add((bn4, voc.CONSTANT, URIRef(data_type_term_map)))
+    elif lang_tag_term_type != "":
+        if lang_tag_term_map_type == "constant":
+            g.add((bn3, voc.LANG_TAG_SHORT, Literal(lang_tag_term_map)))
+        else:
+            print("Error handling language tag term map type!. Got: ", lang_tag_term_map_type)
 
 
 # Add a POM
@@ -181,7 +187,8 @@ def build_sub_graph(file_path_csv: str, s_term_map: str, s_term_map_type: str, s
                     p_term_map: str, p_term_map_type: str, p_term_type: str,\
                     o_term_map: str, o_term_map_type: str, o_term_type: str,\
                     g_term_type: str, g_term_map: str, g_term_map_type: str,\
-                    data_type_term_type: str, data_type_term_map: str, data_type_term_map_type: str) -> Graph:
+                    data_type_term_type: str, data_type_term_map: str, data_type_term_map_type: str,\
+                    lang_tag_term_type: str, lang_tag_term_map: str, lang_tag_term_map_type: str) -> Graph:
     rml_sub_graph = Graph()
 
     # Set RML namespace
@@ -191,7 +198,10 @@ def build_sub_graph(file_path_csv: str, s_term_map: str, s_term_map_type: str, s
     tm = init_template(rml_sub_graph)
     add_logical_source(rml_sub_graph, tm, file_path_csv)
     add_subject(rml_sub_graph, tm, s_term_map, s_term_map_type, s_term_type, g_term_type, g_term_map, g_term_map_type)
-    add_predicate_object_map(rml_sub_graph, tm, p_term_map, p_term_map_type, p_term_type, o_term_map, o_term_map_type, o_term_type, data_type_term_type, data_type_term_map, data_type_term_map_type)
+    add_predicate_object_map(rml_sub_graph, tm, p_term_map, p_term_map_type, p_term_type,\
+                            o_term_map, o_term_map_type, o_term_type,\
+                            data_type_term_type, data_type_term_map, data_type_term_map_type,\
+                            lang_tag_term_type, lang_tag_term_map, lang_tag_term_map_type)
 
     return rml_sub_graph
 

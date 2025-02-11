@@ -108,6 +108,8 @@ def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: s
 def get_term_type(data: str) -> str:
     if "^^" in data:
         data = data.split("^^")[0]
+    elif "@" in data:
+        data = data.split("@")[0]
 
     res = ""
     if isURI(data):
@@ -117,7 +119,7 @@ def get_term_type(data: str) -> str:
     elif isBlanknode(data):
         res = "blanknode"
     else:
-        print("Error detecting s_term_type.")
+        print("Error detecting s_term_type. Got:", data)
         sys.exit(1)
 
     return res
@@ -217,10 +219,15 @@ def clean_entry(entry: str) -> tuple[str,str]:
                 print("Error Cleaning! Found:", split_data)
                 sys.exit(1)
             entry = split_data[0]
+        elif "@" in entry:
+            split_data = entry.split("@")
+            if len(split_data) != 2:
+                print("Error Cleaning! Found:", split_data)
+                sys.exit(1)
+            entry = split_data[0]
         result = entry[1:-1]
     elif isBlanknode(entry):
         result = entry[2:]
-    
     return result.strip()
 
 def remove_base_uri(entry: str, base_uri: str) -> str:
@@ -257,6 +264,12 @@ def isLiteral(value: str) -> bool:
     # Filter datatype
     if "^^" in value:
         split_value = value.split("^^")
+        if len(split_value) != 2:
+            print("Error splitting data! Found", split_value)
+            sys.exit(1)
+        value = split_value[0]
+    elif "@" in value:
+        split_value = value.split("@")
         if len(split_value) != 2:
             print("Error splitting data! Found", split_value)
             sys.exit(1)
@@ -615,10 +628,6 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
         o = o.replace(r"\\{", "{")
         o = o.replace(r"\\}", "}")
 
-        # Early exit if not valid
-        #if "None" in f"{s}|{p}|{o}":
-            #return set()
-
         generated_triples.add(f"{s}|{p}|{o}")
 
 
@@ -721,9 +730,6 @@ def main():
         # Rename cols to remove \
         data.columns = [col.replace("\\", "abbb______") for col in data.columns]
 
-        # if the column contains http://www.w3.org/2001/XMLSchema# rename for easier processing.
-        data = data.replace(to_replace=r'http://www\.w3\.org/2001/XMLSchema#', value='|||', regex=True)
-
         # Store generated graphs for this interation
         tmp_rml_sub_graphs = []
 
@@ -820,7 +826,6 @@ def main():
                 o_term_map = o_term_map.replace("abb_____", "\\\\}")
                 o_term_map = o_term_map.replace("abbb______", "\\")
 
-                
                 ## Handle graph ##
                 g_term_type = "iri"
                 g_term_map = ""
@@ -871,8 +876,6 @@ def main():
                     data_type_term_map_type = ""
 
                     data_type_term_map = data_type_string
-                    # Remove xsd schema prefix
-                    data_type_term_map = data_type_term_map.replace("http://www.w3.org/2001/XMLSchema#", "|||")
 
                     for key, value in row.items():
                         term_map, term_map_type = get_term_map_type(data_type_term_map, key, value, base_uri)
@@ -889,16 +892,45 @@ def main():
                     data_type_term_map = data_type_term_map.replace("abb_____", "}")
                     data_type_term_map = data_type_term_map.replace("abbb______", "\\")
 
+                ## Hanlde Language Tag ##
+                raw_o_value = element.o
+                # Check for datatype
+                res = raw_o_value.split("@")
+                if len(res) != 2:
+                    lang_tag_term_type = ""
+                    lang_tag_term_map = ""
+                    lang_tag_term_map_type = ""
+                else:
+                    lang_tag_string = res[1]
 
-                    # Add xsd prefix back
-                    data_type_term_map = data_type_term_map.replace("|||", "http://www.w3.org/2001/XMLSchema#")
+                    lang_tag_term_type = "literal"
+                    lang_tag_term_map = ""
+                    lang_tag_term_map_type = ""
+
+                    lang_tag_term_map = lang_tag_string
+
+                    for key, value in row.items():
+                        term_map, term_map_type = get_term_map_type(lang_tag_term_map, key, value, base_uri)
+                        if lang_tag_term_map_type == "":
+                            lang_tag_term_map = term_map
+                            lang_tag_term_map_type = term_map_type
+                        elif term_map_type != "constant":
+                            lang_tag_term_map = term_map
+                            lang_tag_term_map_type = term_map_type
+                    
+                    # Rename inserted values from pandas headline
+                    lang_tag_term_map = lang_tag_term_map.replace("a___", " ")
+                    lang_tag_term_map = lang_tag_term_map.replace("ab____", "{")
+                    lang_tag_term_map = lang_tag_term_map.replace("abb_____", "}")
+                    lang_tag_term_map = lang_tag_term_map.replace("abbb______", "\\")
 
                 ## Build rml graph ##
                 tmp_rml_sub_graph = graph_builder.build_sub_graph(csv_path, s_term_map, s_term_map_type, s_term_type,\
                                                             p_term_map, p_term_map_type, p_term_type, \
                                                             o_term_map, o_term_map_type, o_term_type, \
                                                             g_term_type, g_term_map, g_term_map_type, \
-                                                            data_type_term_type, data_type_term_map, data_type_term_map_type)
+                                                            data_type_term_type, data_type_term_map, data_type_term_map_type,\
+                                                            lang_tag_term_type, lang_tag_term_map, lang_tag_term_map_type)
                 if not isDuplicateGraph(tmp_rml_sub_graph, tmp_rml_sub_graphs):
                     tmp_rml_sub_graphs.append(tmp_rml_sub_graph)
 
