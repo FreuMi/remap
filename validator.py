@@ -82,7 +82,7 @@ for folder in folders:
 
 
     rdf_file_refernce = f'{directory}{folder}/output.nq'
-    command = ['python3', 'main.py', '--csv'] + csv_file_strs + ["--rdf", f'{directory}{folder}/{rdf_file}']
+    command = ['python3', 'qre.py', '--csv'] + csv_file_strs + ["--rdf", f'{directory}{folder}/{rdf_file}']
     run_console_program(command)
 
     print("===")

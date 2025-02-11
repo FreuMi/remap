@@ -2,7 +2,7 @@ import vocabulary as voc
 from rdflib import Graph, URIRef, Literal, BNode, Namespace
 from datetime import datetime
 import sys
-import main
+import qre
 import join_identification
 
 # Gernerate a random id based on current time 
@@ -260,8 +260,8 @@ def build_sub_graph_join(g: Graph, g2: Graph) -> Graph:
     RML = Namespace("http://w3id.org/rml/")
     rml_sub_graph2.bind("rml", RML)
 
-    file_path_csv2 = main.getPath(g2)
-    o_term_map2, o_term_map_type2 = main.getObject(g2)
+    file_path_csv2 = qre.getPath(g2)
+    o_term_map2, o_term_map_type2 = qre.getObject(g2)
     o_term_type2 = get_term_type_of_graph(g2, "o")
 
     # Init, add subject, and source
@@ -272,17 +272,17 @@ def build_sub_graph_join(g: Graph, g2: Graph) -> Graph:
     # Generate first part
     rml_sub_graph = Graph()
 
-    file_path_csv = main.getPath(g)
+    file_path_csv = qre.getPath(g)
 
-    s_term_map, s_term_map_type = main.getSubject(g)
+    s_term_map, s_term_map_type = qre.getSubject(g)
     s_term_type = get_term_type_of_graph(g, "s")
 
-    g_term_map, g_term_map_type = main.getGraph(g)
+    g_term_map, g_term_map_type = qre.getGraph(g)
     g_term_type = "iri"
 
-    p_term_map, p_term_map_type = main.getPredicate(g)
+    p_term_map, p_term_map_type = qre.getPredicate(g)
 
-    o_term_map, o_term_map_type = main.getObject(g)
+    o_term_map, o_term_map_type = qre.getObject(g)
 
     # Get child and parents 
     child, parent = join_identification.identify_join(file_path_csv, file_path_csv2)
