@@ -1,4 +1,4 @@
-# 🚀 RML Mapping Reverse Engineering
+# RML Mapping Reverse Engineering
 
 This tool **reverse engineers an RML mapping document** for a given CSV source data and RDF output graph. The generated mapping document is functionally equivalent to the original **unknown RML mapping**, ensuring it produces the same RDF output but may use different RML constructs.
 
