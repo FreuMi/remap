@@ -1073,13 +1073,7 @@ def main():
         # Print the final filtered graphs
         for fg in filtered_graphs:
             rml_sub_graphs.append(fg)
-
-        """
-        for g in rml_sub_graphs:
-            print("XXXXX")
-            print(g.serialize())
-            print("XXXXX")
-        """
+        
     ### Identify joins
     join_graphs = []
     graphs_to_remove = []
@@ -1127,7 +1121,6 @@ def main():
     for g in graphs_to_remove:
         rml_sub_graphs = remove_graph(g, rml_sub_graphs)
     
-
     ### Filter combined result of all input files
     # Prepare data
     possible_triples = []
@@ -1165,7 +1158,6 @@ def main():
     filtered_graphs = []
 
     for sub_g in rml_sub_graphs:
-        x = False
         if not is_join_graph(sub_g):
             info = extract_information(sub_g)
             data = stored_data[info[0]]
@@ -1187,11 +1179,10 @@ def main():
             info = extract_information_join(g1,g2)
             data = stored_data[info[0]]
             data2 = stored_data[info[9]]
-            
             res = generate_expected_triple(data, info, data2)
-            x = True
 
         cnt_found = 0
+
         for entry in res:
             for rdf in rdf_data:
                 s = clean_entry(rdf.s)
@@ -1211,9 +1202,7 @@ def main():
                 if comp == entry:
                     cnt_found+=1
 
-        print(len(res), cnt_found)
         if len(res) == cnt_found:
-            print("Added")
             filtered_graphs.append(sub_g)
     # Final result
     rml_sub_graphs = filtered_graphs

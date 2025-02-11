@@ -65,13 +65,12 @@ def add_subject(g: Graph, tm_name: str, term_map: str, term_map_type: str, term_
         sys.exit(1)
 
     ## Add graph if needed
-    if g_term_type == "":
+    if g_term_map_type == "":
         return
     
-    # Add graph map
+    # Add graph map  
     bn2 = BNode()
-    g.add((bn1, voc.GRAPH_MAP, bn2))
-
+    g.add((bn1, voc.GRAPH_MAP, bn2))   
     if g_term_map_type == "template":
         g.add((bn2, voc.TEMPLATE, Literal(g_term_map)))
     elif g_term_map_type == "reference":
@@ -79,7 +78,7 @@ def add_subject(g: Graph, tm_name: str, term_map: str, term_map_type: str, term_
     elif g_term_map_type == "constant":
         g.add((bn2, voc.CONSTANT, URIRef(g_term_map)))
     else:
-        print("Error: Subject term_map_type unsupported! Found", term_map_type)
+        print("Error: Graph term_map_type unsupported! Found", g_term_map_type)
         sys.exit(1)
 
         
@@ -252,11 +251,6 @@ def get_term_type_of_graph(g: Graph, node_type: str):
         print("Error in get_term_type_graph", term_type)
         sys.exit(1)
 
-def get_graph(g):
-    # TODO
-    return "", "", ""
-
-
 
 def build_sub_graph_join(g: Graph, g2: Graph) -> Graph:
     # Generate second part first
@@ -283,7 +277,8 @@ def build_sub_graph_join(g: Graph, g2: Graph) -> Graph:
     s_term_map, s_term_map_type = main.getSubject(g)
     s_term_type = get_term_type_of_graph(g, "s")
 
-    g_term_type, g_term_map, g_term_map_type = get_graph(g)
+    g_term_map, g_term_map_type = main.getGraph(g)
+    g_term_type = "iri"
 
     p_term_map, p_term_map_type = main.getPredicate(g)
 
