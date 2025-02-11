@@ -339,7 +339,23 @@ def getObject(graph: Graph) -> tuple[str,str]:
     print("Error in getObject")
     sys.exit(1)
 
-def extract_information(graph: Graph) -> tuple[str,str,str,str,str,str,str, str]:
+def getGraph(graph: Graph) -> tuple[str,str]:
+    graphMap = ""
+    for s,p,o in graph:
+        if str(p) == "http://w3id.org/rml/graphMap":
+            graphMap = str(o)
+            break
+    for s,p,o in graph:
+        if str(s) == graphMap:
+            if str(p) == "http://w3id.org/rml/constant":
+                return str(o), "constant"
+            elif str(p) == "http://w3id.org/rml/reference":
+                return str(o), "reference"
+            elif str(p) == "http://w3id.org/rml/template":
+                return str(o), "template"
+    return "", ""
+
+def extract_information(graph: Graph) -> tuple[str,str,str,str,str,str,str,str]:
     # Get source path 
     new_path = getPath(graph)
     # Get subject
@@ -348,8 +364,10 @@ def extract_information(graph: Graph) -> tuple[str,str,str,str,str,str,str, str]
     pred, predicate_type = getPredicate(graph)
     # Get object
     obj, object_type = getObject(graph)
+    # Get graph
+    gra, graph_type = getGraph(graph)
 
-    return (new_path, sub, subject_type, pred, predicate_type, obj, object_type, "")
+    return (new_path, sub, subject_type, pred, predicate_type, obj, object_type, gra, graph_type, "")
 
 def get_parent(g: Graph) -> str:
     for s,p,o in g:
@@ -371,15 +389,16 @@ def extract_information_join(graph1: Graph, graph2: Graph) -> tuple[str,str,str,
     pred, predicate_type = getPredicate(graph1)
     # Get object
     obj, object_type = getSubject(graph2)
+    # Get graph
+    gra, graph_type = getGraph(graph1)
 
     child = get_child(graph1)
     parent = get_parent(graph1)
 
-    return (new_path, sub, subject_type, pred, predicate_type, obj, object_type, new_path2, child, parent)
+    return (new_path, sub, subject_type, pred, predicate_type, obj, object_type, gra, graph_type, new_path2, child, parent)
 
 def isDuplicateGraph(graph: Graph, all_graphs: list[Graph]) -> bool:
     reference_info = extract_information(graph)
-
     for stored_graph in all_graphs:
         # Check if source, subject, predicate, and object are the same.
         stored_information = extract_information(stored_graph)
@@ -417,14 +436,14 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
     generated_triples = set()
 
     ### With Join ###
-    if info[7] != "":
+    if info[9] != "":
         ## Perform Join ##
         # Rename columns
         data = data.rename(columns=lambda col: f"{info[0].replace('.','')}_{col}")
-        data2 = data2.rename(columns=lambda col: f"{info[7].replace('.','')}_{col}")
+        data2 = data2.rename(columns=lambda col: f"{info[9].replace('.','')}_{col}")
         
-        child = f"{info[0].replace('.','')}_{info[8]}"
-        parent = f"{info[7].replace('.','')}_{info[9]}"
+        child = f"{info[0].replace('.','')}_{info[10]}"
+        parent = f"{info[9].replace('.','')}_{info[11]}"
 
         # Perform join
         join_result_df = pd.merge(
@@ -435,7 +454,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             suffixes=("_RxPxx", "_SxPxx"),
         )
 
-        if info[0] == info[7]:
+        if info[0] == info[9]:
             # Handle self join
             columns_to_drop = [col for col in join_result_df.columns if col.endswith("_SxPxx")]
             simplified_df = join_result_df.drop(columns=columns_to_drop)
@@ -522,7 +541,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                     match = match.replace("{", "ab____")
                     match = match.replace("}", "abb_____")
                     match = match.replace("\\", "abbb______")
-                    match = f"{info[7].replace('.','')}_{match}"
+                    match = f"{info[9].replace('.','')}_{match}"
 
                     o = o.replace("{"+match_org+"}", row[match])
 
@@ -532,9 +551,35 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             o = o.replace("abb_____", "\\}")
             o = o.replace("abbb______", "\\")
 
-            # Early exit if not valid
-            #if "None" in f"{s}|{p}|{o}":
-                #return set()
+            # Handle graph
+            if info[6] == "constant":
+                o = info[5]
+            elif info[6] == "reference":
+                key = info[5]
+                key = key.replace(" ", "a___")
+                key = key.replace("{", "ab____")
+                key = key.replace("}", "abb_____")
+                key = key.replace("\\", "abbb______")
+                o = row[key]
+            elif info[6] == "template":
+                # Get template refernces
+                matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[5])
+                o = info[5]
+                for match in matches:
+                    match_org = match
+                    match = match.replace(" ", "a___")
+                    match = match.replace("{", "ab____")
+                    match = match.replace("}", "abb_____")
+                    match = match.replace("\\", "abbb______")
+                    match = f"{info[9].replace('.','')}_{match}"
+
+                    o = o.replace("{"+match_org+"}", row[match])
+
+
+            o = o.replace("a___", " ")
+            o = o.replace("ab____", "\\{")
+            o = o.replace("abb_____", "\\}")
+            o = o.replace("abbb______", "\\")
 
             generated_triples.add(f"{s}|{p}|{o}")
         return generated_triples 
@@ -857,7 +902,6 @@ def main():
                 g_term_map = g_term_map.replace("abb_____", "}")
                 g_term_map = g_term_map.replace("abbb______", "\\")
 
-
                 ## Handle datatype ##
                 raw_o_value = element.o
                 # Check for datatype
@@ -933,7 +977,6 @@ def main():
                                                             lang_tag_term_type, lang_tag_term_map, lang_tag_term_map_type)
                 if not isDuplicateGraph(tmp_rml_sub_graph, tmp_rml_sub_graphs):
                     tmp_rml_sub_graphs.append(tmp_rml_sub_graph)
-
         # Store data
         stored_data[csv_path] = data
 
@@ -1003,6 +1046,12 @@ def main():
         for fg in filtered_graphs:
             rml_sub_graphs.append(fg)
 
+        """
+        for g in rml_sub_graphs:
+            print("XXXXX")
+            print(g.serialize())
+            print("XXXXX")
+        """
     ### Identify joins
     join_graphs = []
     graphs_to_remove = []
@@ -1040,7 +1089,6 @@ def main():
             invar_g2 = get_invar(info_g2[5], info_g2[6])
             if invar_g != invar_g2:
                 continue
-            
             # If we arrive here, generate the mapping
             new_join_graph = graph_builder.build_sub_graph_join(g, g2)
             join_graphs.append(new_join_graph)
@@ -1050,6 +1098,7 @@ def main():
     # Remvoe graphs that are used in join
     for g in graphs_to_remove:
         rml_sub_graphs = remove_graph(g, rml_sub_graphs)
+    
 
     ### Filter combined result of all input files
     # Prepare data
@@ -1073,7 +1122,7 @@ def main():
     for g1, g2 in join_graphs:
         info = extract_information_join(g1,g2)
         data = stored_data[info[0]]
-        data2 = stored_data[info[7]]
+        data2 = stored_data[info[9]]
         res = generate_expected_triple(data, info, data2)
         # Add to original data
         g = g1 + g2
@@ -1087,6 +1136,7 @@ def main():
     # Check if all triples are expected
     filtered_graphs = []
     for g in rml_sub_graphs:
+        x = False
         if not is_join_graph(g):
             info = extract_information(g)
             data = stored_data[info[0]]
@@ -1108,9 +1158,10 @@ def main():
             
             info = extract_information_join(g1,g2)
             data = stored_data[info[0]]
-            data2 = stored_data[info[7]]
+            data2 = stored_data[info[9]]
             
             res = generate_expected_triple(data, info, data2)
+            x = True
 
         cnt_found = 0
         for entry in res:
@@ -1130,8 +1181,11 @@ def main():
                 comp = f"{s}|{p}|{o}"
                 if comp == entry:
                     cnt_found+=1
-
+        if x:
+            print(len(res), cnt_found)
         if len(res) == cnt_found:
+            if x:
+                print("Added")
             filtered_graphs.append(g)
     # Final result
     rml_sub_graphs = filtered_graphs
