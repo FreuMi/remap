@@ -21,21 +21,21 @@ RMLTC0007h-CSV: not applicable
 RMLTC0008a-CSV: ok
 RMLTC0008b-CSV: ok (ReferenceObjectMap not reversible)
 RMLTC0008c-CSV: ok
-RMLTC0009a-CSV: nok
+RMLTC0009a-CSV: ok
 RMLTC0009b-CSV: TODO: Join + multiple graphs
 RMLTC0010a-CSV: ok
 RMLTC0010b-CSV: ok
 RMLTC0010c-CSV: nok
-RMLTC0011b-CSV: TODO: Multiple Files
+RMLTC0011b-CSV: ok
 RMLTC0012a-CSV: ok
 RMLTC0012b-CSV: ok (Multiple valid triple)
 RMLTC0012c-CSV: not applicable
 RMLTC0012d-CSV: not applicable
-RMLTC0015a-CSV: TODO: Multiple Files
+RMLTC0015a-CSV: nok TODO: Multiple Files
 RMLTC0015b-CSV: not applicable
 RMLTC0019a-CSV: ok
 RMLTC0019b-CSV: not applicable
-RMLTC0020a-CSV: ok (TODO: duplicate graphs)
+RMLTC0020a-CSV: ok
 RMLTC0021a-CSV: ok
 RMLTC0022a-CSV: ok
 RMLTC0022b-CSV: ok

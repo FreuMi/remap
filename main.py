@@ -7,6 +7,10 @@ import re
 import argparse
 from urllib.parse import urlparse, quote
 import vocabulary as voc
+import logging
+
+# Suppress warnings of rdflib
+logging.getLogger("rdflib").setLevel(logging.ERROR)  
 
 # Class to store quad data
 @dataclass
@@ -85,7 +89,6 @@ def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: s
         else:
             print("Error detecting term_map_type! Found:", rdf_term_map_type)
             sys.exit(1)
-        print(rdf_term_map_type)
     if is_protected:
         rdf_term = protected_prefix + rest_iri
 
@@ -1120,7 +1123,11 @@ def main():
     str_result_graph = str_result_graph.replace("\\\\","\\")
     str_result_graph = str_result_graph.replace("\\\\\\\\","\\\\")
 
-
+    # If only base uri is there, an error occured
+    if str_result_graph.strip() == f"@base <{base_uri}> .":
+        print("An unknown error occured. Could not generate RML mapping document.")
+        sys.exit(1)
+    
     # Write to file.
     with open(output_file, "w") as file:
         file.write(str_result_graph)
