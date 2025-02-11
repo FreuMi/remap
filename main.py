@@ -385,10 +385,10 @@ def mask_string(input_data: str, row: dict[str, str]) -> str:
     tmp_input_data = ""
     for char in input_data:
         if char == "{":
-            tmp_input_data += "\\{"
+            tmp_input_data += r"\\{"
             continue
         elif char == "}":
-            tmp_input_data += "\\}"
+            tmp_input_data += r"\\}"
             continue
         tmp_input_data += char
 
@@ -612,6 +612,8 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
         o = o.replace("ab____", "\\{")
         o = o.replace("abb_____", "\\}")
         o = o.replace("abbb______", "\\")
+        o = o.replace(r"\\{", "{")
+        o = o.replace(r"\\}", "}")
 
         # Early exit if not valid
         #if "None" in f"{s}|{p}|{o}":
@@ -801,7 +803,6 @@ def main():
                 o = clean_entry(o)
                 if o_term_type == "iri":
                     o = remove_base_uri(o, base_uri)
-
                 o_term_map = o
                 for key, value in row.items():
                     term_map, term_map_type = get_term_map_type(o_term_map, key, value, base_uri)
@@ -811,10 +812,8 @@ def main():
                     elif term_map_type != "constant":
                         o_term_map = term_map
                         o_term_map_type = term_map_type
-
                 # Mask string
                 o_term_map = mask_string(o_term_map, row)
-
                 # Rename inserted values from pandas headline
                 o_term_map = o_term_map.replace("a___", " ")
                 o_term_map = o_term_map.replace("ab____", "\\\\{")
