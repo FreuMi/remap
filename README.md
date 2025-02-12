@@ -1,4 +1,4 @@
-# RML Mapping Reverse Engineering
+# ReMap: RML Mapping Reverse Engineering
 
 This tool **reverse engineers an RML mapping document** for a given CSV source data and RDF output graph. The generated mapping document is functionally equivalent to the original **unknown RML mapping**, ensuring it produces the same RDF output but may use different RML constructs.
 
@@ -26,13 +26,13 @@ This tool **reverse engineers an RML mapping document** for a given CSV source d
 ## Usage
 Run the tool with:
 ```bash
-   python3 qre.py --csv [LIST OF CSV INPUT FILES] --rdf RDF_OUTPUT_FILE
+   python3 remap.py --csv [LIST OF CSV INPUT FILES] --rdf RDF_OUTPUT_FILE
 ```
 
 ## Example Usage
 If you have two input CSV files (`sport.csv` and `student.csv`) and an RDF output file (`output.nq`), execute:
 ```bash
-   python3 qre.py --csv sport.csv student.csv --rdf output.nq
+   python3 remap.py --csv sport.csv student.csv --rdf output.nq
 ```
 This will generate an RML mapping document that, when executed, produces the same RDF output graph.
 
