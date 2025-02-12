@@ -807,8 +807,14 @@ def main():
         # Store generated graphs for this interation
         tmp_rml_sub_graphs = []
 
+        print(f"Processing {len(data)*len(data.columns)} entries...")
+        
+        cnt = 0
+
         # Iterate over all csv data
         for _, row in data.iterrows():
+            if cnt % 10000 == 0:
+                print("Processed: ", cnt)
             row = row.to_dict()
             # Sort so longer ones are first
             row = dict(sorted(row.items(), key=lambda item: len(item[1]), reverse=True))
@@ -1006,6 +1012,9 @@ def main():
                                                             lang_tag_term_type, lang_tag_term_map, lang_tag_term_map_type)
                 if not isDuplicateGraph(tmp_rml_sub_graph, tmp_rml_sub_graphs):
                     tmp_rml_sub_graphs.append(tmp_rml_sub_graph)
+            
+            cnt += 1
+
         # Store data
         stored_data[csv_path] = data
 
