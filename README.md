@@ -23,10 +23,29 @@ This tool **reverse engineers an RML mapping document** for a given CSV source d
    pip install -r requirements.txt
     ```
 
+## Compilation
+In order to compile the project we use [Nuitka](https://nuitka.net/).
+
+1. **Install required packages**
+```bash
+   pip install nuitka
+   pip install -r requirements.txt
+   sudo apt install python3-dev patchelf build-essential
+```
+2. **Start compilation**
+```bash
+nuitka --standalone --onefile --include-package=rdflib remap.py
+```
+
 ## Usage
-Run the tool with:
+Run the tool with python:
 ```bash
    python3 remap.py --csv [LIST OF CSV INPUT FILES] --rdf RDF_OUTPUT_FILE
+```
+
+Run the compiled tool:
+```bash
+   ./remap.bin --csv [LIST OF CSV INPUT FILES] --rdf RDF_OUTPUT_FILE
 ```
 
 ## Example Usage
