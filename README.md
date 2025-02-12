@@ -10,7 +10,7 @@ This tool **reverse engineers an RML mapping document** for a given CSV source d
 
 1. **Clone the repository:**
    ```bash
-   git clone git@github.com:FreuMi/mapping_generator.git
+   git clone git@github.com:FreuMi/remap.git
    cd mapping_generator
     ```
 2. **(Optional) Create a virtual environment**:
