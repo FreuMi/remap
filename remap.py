@@ -793,6 +793,7 @@ def main():
     for csv_path in file_path_csv:
         # Load csv data
         data: pd.DataFrame = pd.read_csv(csv_path, dtype=str)
+        data = data.drop_duplicates()
         data = data.fillna("None")
 
         # Rename cols to remove whitespace
@@ -1074,6 +1075,8 @@ def main():
         for fg in filtered_graphs:
             rml_sub_graphs.append(fg)
         
+        print(f"Finished processing: {csv_path}")
+    
     ### Identify joins
     join_graphs = []
     graphs_to_remove = []
