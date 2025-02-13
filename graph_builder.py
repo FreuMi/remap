@@ -189,7 +189,6 @@ def build_sub_graph(file_path_csv: str, s_term_map: str, s_term_map_type: str, s
                     data_type_term_type: str, data_type_term_map: str, data_type_term_map_type: str,\
                     lang_tag_term_type: str, lang_tag_term_map: str, lang_tag_term_map_type: str) -> Graph:
     rml_sub_graph = Graph()
-
     # Set RML namespace
     RML = Namespace("http://w3id.org/rml/")
     rml_sub_graph.bind("rml", RML)

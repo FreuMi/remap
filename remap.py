@@ -61,6 +61,11 @@ def is_join_graph(g):
             return True
     return False
 
+def isIn(sub, s):
+    # Remove all content within curly braces (and the braces themselves)
+    cleaned_s = re.sub(r'\{[^}]*\}', '', s)
+    return sub in cleaned_s
+
 # Itentify term_map_type of (constant, reference, template) and generate term_map
 def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: str) -> tuple[str, str]:
     rdf_term_map_type = ""
@@ -71,7 +76,7 @@ def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: s
     if is_protected:
         rdf_term = rest_iri
 
-    if csv_data not in rdf_term:
+    if not isIn(csv_data, rdf_term):
         rdf_term_map_type = "constant"
     else:
         org_csv_data = csv_data
@@ -462,7 +467,133 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
 
         # Iterate over data
         for _, row in join_result_df.iterrows():
-            row = row.to_dict()          
+            try:
+                row = row.to_dict()          
+                s = ""
+                p = ""
+                o = ""
+                g = ""
+
+                # Subject
+                if info[2] == "constant":
+                    s = info[1]
+                elif info[2] == "reference":
+                    key = info[1]
+                    key = key.replace(" ", "a___")
+                    key = key.replace("{", "ab____")
+                    key = key.replace("}", "abb_____")
+                    key = key.replace("\\", "abbb______")
+                    s = row[key]
+                elif info[2] == "template":
+                    # Get template refernces
+                    matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[1])
+                    s = info[1]
+                    for match in matches:
+                        match_org = match
+                        match = match.replace(" ", "a___")
+                        match = match.replace("{", "ab____")
+                        match = match.replace("}", "abb_____")
+                        match = match.replace("\\", "abbb______")
+                        match = f"{info[0].replace('.','')}_{match}"
+                        s = s.replace("{"+match_org+"}", row[match])
+
+                s = s.replace("a___", " ")
+                s = s.replace("ab____", "\\{")
+                s = s.replace("abb_____", "\\}")
+                s = s.replace("abbb______", "\\")
+
+                if info[4] == "constant":
+                    p = info[3]
+                elif info[4] == "reference":
+                    key = info[3]
+                    key = key.replace(" ", "a___")
+                    key = key.replace("{", "ab____")
+                    key = key.replace("}", "abb_____")
+                    key = key.replace("\\", "abbb______")
+                    p = row[key]
+                elif info[4] == "template":
+                    # Get template refernces
+                    matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[3])
+                    p = info[3]
+                    for match in matches:
+                        match_org = match
+                        match = match.replace(" ", "a___")
+                        match = match.replace("{", "ab____")
+                        match = match.replace("}", "abb_____")
+                        match = match.replace("\\", "abbb______")
+                        p = p.replace("{"+match_org+"}", row[match])
+                
+                p = p.replace("a___", " ")
+                p = p.replace("ab____", "\\{")
+                p = p.replace("abb_____", "\\}")
+                p = p.replace("abbb______", "\\")
+
+                if info[6] == "constant":
+                    o = info[5]
+                elif info[6] == "reference":
+                    key = info[5]
+                    key = key.replace(" ", "a___")
+                    key = key.replace("{", "ab____")
+                    key = key.replace("}", "abb_____")
+                    key = key.replace("\\", "abbb______")
+                    o = row[key]
+                elif info[6] == "template":
+                    # Get template refernces
+                    matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[5])
+                    o = info[5]
+                    for match in matches:
+                        match_org = match
+                        match = match.replace(" ", "a___")
+                        match = match.replace("{", "ab____")
+                        match = match.replace("}", "abb_____")
+                        match = match.replace("\\", "abbb______")
+                        match = f"{info[9].replace('.','')}_{match}"
+                        o = o.replace("{"+match_org+"}", row[match])
+
+
+                o = o.replace("a___", " ")
+                o = o.replace("ab____", "\\{")
+                o = o.replace("abb_____", "\\}")
+                o = o.replace("abbb______", "\\")
+                
+                # Handle graph
+                if info[8] == "constant":
+                    g = info[7]
+                elif info[8] == "reference":
+                    key = info[7]
+                    key = key.replace(" ", "a___")
+                    key = key.replace("{", "ab____")
+                    key = key.replace("}", "abb_____")
+                    key = key.replace("\\", "abbb______")
+                    g = row[key]
+                elif info[8] == "template":
+                    # Get template refernces
+                    matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[7])
+                    g = info[7]
+                    for match in matches:
+                        match_org = match
+                        match = match.replace(" ", "a___")
+                        match = match.replace("{", "ab____")
+                        match = match.replace("}", "abb_____")
+                        match = match.replace("\\", "abbb______")
+                        g = g.replace("{"+match_org+"}", row[match])
+
+                g = g.replace("a___", " ")
+                g = g.replace("ab____", "\\{")
+                g = g.replace("abb_____", "\\}")
+                g = g.replace("abbb______", "\\")
+                g = g.replace(r"\\{", "{")
+                g = g.replace(r"\\}", "}")
+
+                generated_triples.add(f"{s}|{p}|{o}|{g}")
+            except KeyError:
+                pass
+        return generated_triples 
+
+    ### Without Join ###
+    for _, row in data.iterrows():
+        try:
+            row = row.to_dict()
             s = ""
             p = ""
             o = ""
@@ -488,7 +619,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                     match = match.replace("{", "ab____")
                     match = match.replace("}", "abb_____")
                     match = match.replace("\\", "abbb______")
-                    match = f"{info[0].replace('.','')}_{match}"
+
                     s = s.replace("{"+match_org+"}", row[match])
 
             s = s.replace("a___", " ")
@@ -541,17 +672,15 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                     match = match.replace("{", "ab____")
                     match = match.replace("}", "abb_____")
                     match = match.replace("\\", "abbb______")
-                    match = f"{info[9].replace('.','')}_{match}"
-
                     o = o.replace("{"+match_org+"}", row[match])
-
 
             o = o.replace("a___", " ")
             o = o.replace("ab____", "\\{")
             o = o.replace("abb_____", "\\}")
             o = o.replace("abbb______", "\\")
-            
-            # Handle graph
+            o = o.replace(r"\\{", "{")
+            o = o.replace(r"\\}", "}")
+
             if info[8] == "constant":
                 g = info[7]
             elif info[8] == "reference":
@@ -581,128 +710,8 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             g = g.replace(r"\\}", "}")
 
             generated_triples.add(f"{s}|{p}|{o}|{g}")
-        return generated_triples 
-
-    ### Without Join ###
-    for _, row in data.iterrows():
-        row = row.to_dict()
-        s = ""
-        p = ""
-        o = ""
-        g = ""
-
-        # Subject
-        if info[2] == "constant":
-            s = info[1]
-        elif info[2] == "reference":
-            key = info[1]
-            key = key.replace(" ", "a___")
-            key = key.replace("{", "ab____")
-            key = key.replace("}", "abb_____")
-            key = key.replace("\\", "abbb______")
-            s = row[key]
-        elif info[2] == "template":
-            # Get template refernces
-            matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[1])
-            s = info[1]
-            for match in matches:
-                match_org = match
-                match = match.replace(" ", "a___")
-                match = match.replace("{", "ab____")
-                match = match.replace("}", "abb_____")
-                match = match.replace("\\", "abbb______")
-
-                s = s.replace("{"+match_org+"}", row[match])
-
-        s = s.replace("a___", " ")
-        s = s.replace("ab____", "\\{")
-        s = s.replace("abb_____", "\\}")
-        s = s.replace("abbb______", "\\")
-
-        if info[4] == "constant":
-            p = info[3]
-        elif info[4] == "reference":
-            key = info[3]
-            key = key.replace(" ", "a___")
-            key = key.replace("{", "ab____")
-            key = key.replace("}", "abb_____")
-            key = key.replace("\\", "abbb______")
-            p = row[key]
-        elif info[4] == "template":
-            # Get template refernces
-            matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[3])
-            p = info[3]
-            for match in matches:
-                match_org = match
-                match = match.replace(" ", "a___")
-                match = match.replace("{", "ab____")
-                match = match.replace("}", "abb_____")
-                match = match.replace("\\", "abbb______")
-                p = p.replace("{"+match_org+"}", row[match])
-        
-        p = p.replace("a___", " ")
-        p = p.replace("ab____", "\\{")
-        p = p.replace("abb_____", "\\}")
-        p = p.replace("abbb______", "\\")
-
-        if info[6] == "constant":
-            o = info[5]
-        elif info[6] == "reference":
-            key = info[5]
-            key = key.replace(" ", "a___")
-            key = key.replace("{", "ab____")
-            key = key.replace("}", "abb_____")
-            key = key.replace("\\", "abbb______")
-            o = row[key]
-        elif info[6] == "template":
-            # Get template refernces
-            matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[5])
-            o = info[5]
-            for match in matches:
-                match_org = match
-                match = match.replace(" ", "a___")
-                match = match.replace("{", "ab____")
-                match = match.replace("}", "abb_____")
-                match = match.replace("\\", "abbb______")
-                o = o.replace("{"+match_org+"}", row[match])
-
-        o = o.replace("a___", " ")
-        o = o.replace("ab____", "\\{")
-        o = o.replace("abb_____", "\\}")
-        o = o.replace("abbb______", "\\")
-        o = o.replace(r"\\{", "{")
-        o = o.replace(r"\\}", "}")
-
-        if info[8] == "constant":
-            g = info[7]
-        elif info[8] == "reference":
-            key = info[7]
-            key = key.replace(" ", "a___")
-            key = key.replace("{", "ab____")
-            key = key.replace("}", "abb_____")
-            key = key.replace("\\", "abbb______")
-            g = row[key]
-        elif info[8] == "template":
-            # Get template refernces
-            matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', info[7])
-            g = info[7]
-            for match in matches:
-                match_org = match
-                match = match.replace(" ", "a___")
-                match = match.replace("{", "ab____")
-                match = match.replace("}", "abb_____")
-                match = match.replace("\\", "abbb______")
-                g = g.replace("{"+match_org+"}", row[match])
-
-        g = g.replace("a___", " ")
-        g = g.replace("ab____", "\\{")
-        g = g.replace("abb_____", "\\}")
-        g = g.replace("abbb______", "\\")
-        g = g.replace(r"\\{", "{")
-        g = g.replace(r"\\}", "}")
-
-        generated_triples.add(f"{s}|{p}|{o}|{g}")
-
+        except KeyError:
+            pass
 
     return generated_triples
 
@@ -807,14 +816,10 @@ def main():
         # Store generated graphs for this interation
         tmp_rml_sub_graphs = []
 
-        print(f"Processing {len(data)*len(data.columns)} entries...")
-        
-        cnt = 0
-
+        print(f"Processing {len(data)} entries...")
+    
         # Iterate over all csv data
         for _, row in data.iterrows():
-            if cnt % 10000 == 0:
-                print("Processed: ", cnt)
             row = row.to_dict()
             # Sort so longer ones are first
             row = dict(sorted(row.items(), key=lambda item: len(item[1]), reverse=True))
@@ -1013,8 +1018,6 @@ def main():
                 if not isDuplicateGraph(tmp_rml_sub_graph, tmp_rml_sub_graphs):
                     tmp_rml_sub_graphs.append(tmp_rml_sub_graph)
             
-            cnt += 1
-
         # Store data
         stored_data[csv_path] = data
 
@@ -1167,7 +1170,7 @@ def main():
     rml_sub_graphs = filtered_graphs
 
     # Check if all triples are expected
-    filtered_graphs = []
+    filtered_graphs = []    
 
     for sub_g in rml_sub_graphs:
         if not is_join_graph(sub_g):
@@ -1225,8 +1228,9 @@ def main():
     RML = Namespace("http://w3id.org/rml/")
     result_graph.bind("rml", RML)
     for rml_sub_graph in rml_sub_graphs:
-            result_graph += rml_sub_graph
-    
+                result_graph += rml_sub_graph
+
+
     str_result_graph = result_graph.serialize(format="turtle")
     
     # Add base uri if needed
