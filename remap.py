@@ -62,7 +62,9 @@ def is_join_graph(g):
     return False
 
 def isIn(sub, s):
-    # Remove all content within curly braces (and the braces themselves)
+    if s.count("{") > 1:
+        return sub in s
+
     cleaned_s = re.sub(r'\{[^}]*\}', '', s)
     return sub in cleaned_s
 
