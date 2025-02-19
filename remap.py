@@ -1094,40 +1094,47 @@ def main():
     ### Identify joins
     join_graphs = []
     graphs_to_remove = []
+
     for g in rml_sub_graphs:
         info_g = extract_information(g)
         # Compare to all other files
         for g2 in rml_sub_graphs:
             info_g2 = extract_information(g2)
+            
             # Do not compare with itself
             if info_g2 == info_g:
                 continue
 
-            # source files must be different
-            #if info_g[0] == info_g2[0]:
-                #continue
+            # tm1 must not be constant in subject
+            if info_g[2] == "constant":
+                continue
 
-            # second part must be constant in subject
+            # tm1 must be constant in object
+            if info_g[6] != "constant":
+                continue
+
+            # tm2 must be constant in subject
             if info_g2[2] != "constant":
+                continue
+
+            # tm2 must not be constant in object
+            if info_g2[6] == "constant":
                 continue
             
             # predicate and prediacte term type must be the same
             if not (info_g[3] == info_g2[3] and info_g[4] == info_g2[4]):
                 continue
 
-            # object term type must be the same
-            if info_g[6] != info_g2[6]:
+            # invar of tm1 subject must be in tm2
+            invar_subject_tm1 = get_invar(info_g[1], info_g[2])
+            if invar_subject_tm1 not in info_g2[1]:
                 continue
 
-            # Object map can not be constant
-            if info_g[6] == "constant" or info_g2[6] == "constant":
+            # invar of tm2 object must be in tm1
+            invar_object_tm2 = get_invar(info_g2[5], info_g2[6])
+            if invar_object_tm2 not in info_g[5]:
                 continue
 
-            # object term map invar must be the same
-            invar_g = get_invar(info_g[5], info_g[6])
-            invar_g2 = get_invar(info_g2[5], info_g2[6])
-            if invar_g != invar_g2:
-                continue
             # If we arrive here, generate the mapping
             new_join_graph = graph_builder.build_sub_graph_join(g, g2)
             join_graphs.append(new_join_graph)
