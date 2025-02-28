@@ -1,0 +1,11 @@
+I have this student_sport.csv file:
+Student,Sport
+Venus,Tennis
+
+and want this rdf graph:
+<http://example.com/Venus> <http://xmlns.com/foaf/0.1/name> "Venus" .
+<http://example.com/Venus> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.com/Student> .
+<http://example.com/Tennis> <http://xmlns.com/foaf/0.1/name> "Tennis" .
+<http://example.com/Tennis> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.com/Sport> .
+
+can you generate the rml mapping for me?

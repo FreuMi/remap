@@ -1,0 +1,17 @@
+I have this country_en.csv file:
+Code,Name
+BO,"Bolivia, Plurinational State of"
+IE,Ireland
+
+and this country_es.csv file:
+Code,Name
+BO,"Estado Plurinacional de Bolivia"
+IE,Irlanda
+
+and want this rdf graph:
+<http://example.com/BO> <http://www.w3.org/2000/01/rdf-schema#label> "Bolivia, Plurinational State of"@en .
+<http://example.com/BO> <http://www.w3.org/2000/01/rdf-schema#label> "Estado Plurinacional de Bolivia"@es .
+<http://example.com/IE> <http://www.w3.org/2000/01/rdf-schema#label> "Ireland"@en .
+<http://example.com/IE> <http://www.w3.org/2000/01/rdf-schema#label> "Irlanda"@es .
+
+can you generate the rml mapping for me?

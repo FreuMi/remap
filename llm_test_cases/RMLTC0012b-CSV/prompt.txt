@@ -1,0 +1,19 @@
+I have this lives.csv file:
+fname,lname,city
+Bob,Smith,London
+Sue,Jones,Madrid
+Bob,Smith,London
+
+and this persons.csv file:
+fname,lname,amount
+Bob,Smith,30
+Sue,Jones,20
+Bob,Smith,30
+
+and want this rdf graph:
+_:BobSmith <http://example.com/city> "London" .
+_:BobSmith <http://xmlns.com/foaf/0.1/name> "Bob Smith" .
+_:SueJones <http://example.com/city> "Madrid" .
+_:SueJones <http://xmlns.com/foaf/0.1/name> "Sue Jones" .
+
+can you generate the rml mapping for me?

@@ -1,0 +1,7 @@
+I have this student.csv file:
+ID,FirstName,LastName
+10,Venus,Williams
+
+and want this rdf graph:
+<http://example.com/Student/10/Venus> <http://xmlns.com/foaf/0.1/name> "Venus" .
+can you generate the rml mapping for me?

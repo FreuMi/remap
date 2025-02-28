@@ -1,0 +1,10 @@
+I have this data.csv file:
+FOO,BAR
+1,string
+2,int
+
+and want this rdf graph:
+<http://example.com/1> <http://example.com/x> "1"^^<http://example.com/base/datatype#string> .
+<http://example.com/2> <http://example.com/x> "2"^^<http://example.com/base/datatype#int> .
+
+can you generate the rml mapping for me?

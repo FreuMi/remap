@@ -1,0 +1,10 @@
+I have this persons.csv file:
+ID,FirstName,LastName
+10,http://example.com/ns#Jhon,Smith
+20,Carlos,Mendoza
+
+and want this rdf graph:
+<http://example.com/ns#Jhon> <http://xmlns.com/foaf/0.1/name> "http://example.com/ns#Jhon" .
+<http://example.com/base/Carlos> <http://xmlns.com/foaf/0.1/name> "Carlos" .
+
+can you generate the rml mapping for me?

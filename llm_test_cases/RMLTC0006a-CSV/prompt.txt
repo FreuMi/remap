@@ -1,0 +1,8 @@
+I have this student.csv file:
+ID,FirstName,LastName
+10,Venus,Williams
+
+and want this rdf graph:
+<http://example.com/BadStudent> <http://example.com/description> "Bad Student" <http://example.com/graph/student> .
+
+can you generate the rml mapping for me?

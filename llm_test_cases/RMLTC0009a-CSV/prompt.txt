@@ -1,0 +1,16 @@
+I have this sport.csv file:
+ID,Name
+100,Tennis
+
+and this student.csv:
+ID,Sport,Name
+10,100,Venus Williams
+20,,Demi Moore
+
+and want this rdf graph:
+<http://example.com/resource/student_10> <http://xmlns.com/foaf/0.1/name> "Venus Williams"  .
+<http://example.com/resource/student_20> <http://xmlns.com/foaf/0.1/name> "Demi Moore"  .
+<http://example.com/resource/sport_100> <http://www.w3.org/2000/01/rdf-schema#label> "Tennis" .
+<http://example.com/resource/student_10> <http://example.com/ontology/practises> <http://example.com/resource/sport_100>  .
+
+can you generate the rml mapping for me?

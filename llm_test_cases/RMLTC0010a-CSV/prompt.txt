@@ -1,0 +1,12 @@
+I have this country_info.csv file:
+Country Code,Name,ISO 3166
+1,"Bolivia, Plurinational State of",BO
+2,"Ireland",IE
+3,"Saint Martin (French part)",MF
+
+and want this rdf graph:
+<http://example.com/1> <http://example.com/name> "Bolivia, Plurinational State of" .
+<http://example.com/2> <http://example.com/name> "Ireland" .
+<http://example.com/3> <http://example.com/name> "Saint Martin (French part)" .
+
+can you generate the rml mapping for me?
