@@ -1,0 +1,58 @@
+@prefix rr:  <http://www.w3.org/ns/r2rml#> .
+@prefix rml: <http://semweb.mmlab.be/ns/rml#> .
+@prefix ql:  <http://semweb.mmlab.be/ns/ql#> .
+@prefix ex:  <http://example.com/> .
+@base <http://example.com/> .
+
+<#StudentMapping>
+    a rr:TriplesMap;
+    rml:logicalSource [
+        rml:source "student.csv";
+        rml:referenceFormulation ql:CSV
+    ];
+    rr:subjectMap [
+        rr:template "http://example.com/student/{ID}"
+    ];
+    rr:predicateObjectMap [
+        rr:predicate ex:lastName;
+        rr:objectMap [ rml:reference "LastName" ]
+    ];
+    rr:predicateObjectMap [
+        rr:predicate ex:firstName;
+        rr:objectMap [ rml:reference "FirstName" ]
+    ].
+
+<#SportMapping>
+    a rr:TriplesMap;
+    rml:logicalSource [
+        rml:source "sport.csv";
+        rml:referenceFormulation ql:CSV
+    ];
+    rr:subjectMap [
+        rr:template "http://example.com/sport/{ID}"
+    ];
+    rr:predicateObjectMap [
+        rr:predicate ex:description;
+        rr:objectMap [ rml:reference "Description" ]
+    ];
+    rr:predicateObjectMap [
+        rr:predicate ex:id;
+        rr:objectMap [ rml:reference "ID" ]
+    ].
+
+<#StudentSportMapping>
+    a rr:TriplesMap;
+    rml:logicalSource [
+        rml:source "student_sport.csv";
+        rml:referenceFormulation ql:CSV
+    ];
+    rr:subjectMap [
+        rr:template "http://example.com/student/{ID_Student}"
+    ];
+    rr:predicateObjectMap [
+        rr:predicate ex:plays;
+        rr:objectMap [
+            rr:template "http://example.com/sport/{ID_Sport}"
+        ]
+    ].
+

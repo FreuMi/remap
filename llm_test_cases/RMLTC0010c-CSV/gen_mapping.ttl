@@ -1,0 +1,59 @@
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+@prefix rml: <http://semweb.mmlab.be/ns/rml#> .
+@prefix ql: <http://semweb.mmlab.be/ns/ql#> .
+@prefix fnml: <http://semweb.mmlab.be/ns/fnml#> .
+@prefix fno: <http://w3id.org/function/ontology#> .
+@prefix ex: <http://example.com/> .
+@base <http://example.com/> .
+
+
+<#CountryTriplesMap>
+  a rr:TriplesMap;
+  rml:logicalSource [
+    rml:source "country_info.csv";
+    rml:referenceFormulation ql:CSV
+  ];
+  # Subject: construct an IRI like
+  #   http://example.com/{Country Code}/{percent-encoded Name}
+  rr:subjectMap [
+    rr:termType rr:IRI;
+    fnml:functionValue [
+      fno:executes <#EncodeIRI>;
+      fno:parameter [
+         fno:bindingName "code";
+         rml:reference "Country Code"
+      ];
+      fno:parameter [
+         fno:bindingName "name";
+         rml:reference "Name"
+      ]
+    ]
+  ];
+  # Predicate-object: the predicate is a constant and the object is produced by wrapping
+  # the ISO 3166 value in triple curly braces, e.g. "{{{ BO }}}".
+  rr:predicateObjectMap [
+    rr:predicate ex:code;
+    rr:objectMap [
+      fnml:functionValue [
+         fno:executes <#WrapTripleCurly>;
+         fno:parameter [
+             fno:bindingName "iso";
+             rml:reference "ISO 3166"
+         ]
+      ]
+    ]
+  ].
+
+# Function to produce the subject IRI.
+<#EncodeIRI>
+  a fno:Function;
+  rdfs:label "Generate IRI from country code and name (with URL-encoding)";
+  fno:expectsList ( "code" "name" );
+  fno:returns "iri" .
+
+# Function to wrap the ISO code in triple curly braces.
+<#WrapTripleCurly>
+  a fno:Function;
+  rdfs:label "Wrap ISO code in triple curly braces";
+  fno:expectsList ( "iso" );
+  fno:returns "wrappedString" .
