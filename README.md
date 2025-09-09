@@ -63,7 +63,7 @@ If you use this work, please cite:
 @inproceedings{mappingByExample,
   title={Mapping by Example: Towards an RML Mapping Reverse Engineering Pipeline},
   author={Freund, Michael and Dorsch, Rene and Schmid, Sebastian and Harth, Andreas},
-  booktitle={Sixth International Workshop on Knowledge Graph Construction @ ESWC2025}
+  booktitle={Sixth International Workshop on Knowledge Graph Construction}
 }
 ```
 
