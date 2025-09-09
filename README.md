@@ -55,5 +55,17 @@ If you have two input CSV files (`sport.csv` and `student.csv`) and an RDF outpu
 ```
 This will generate an RML mapping document that, when executed, produces the same RDF output graph.
 
+## Citation
+
+If you use this work, please cite:
+
+```bibtex
+@inproceedings{mappingByExample,
+  title={Mapping by Example: Towards an RML Mapping Reverse Engineering Pipeline},
+  author={Freund, Michael and Dorsch, Rene and Schmid, Sebastian and Harth, Andreas},
+  booktitle={Sixth International Workshop on Knowledge Graph Construction @ ESWC2025}
+}
+```
+
 ##  License
 This project is licensed under the GNU Affero General Public License version 3 (AGPLv3). The full text of the license can be found in the `LICENSE` file in this repository.
