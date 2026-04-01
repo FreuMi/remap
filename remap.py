@@ -1,5 +1,6 @@
 import pandas as pd
 from rdflib import Graph, Namespace, URIRef
+import rdflib
 import sys
 from dataclasses import dataclass
 import graph_builder
@@ -189,27 +190,55 @@ def decode_safe_iri(safe_iri: str) -> str:
 
 # funciton to parse rdf data in nquads
 def parse(path: str) -> list[Quad]:
-    rdf_data = []
-    # Load file
+    # Load data from file
     with open(path, 'r') as f:
-        for line in f:
-            line = line.strip()
-            line_parts = tokenizer(line)      
+        raw_data = f.read()
 
-            # Decode iri safety
-            for i in range(len(line_parts)):
-                line_parts[i] = decode_safe_iri(line_parts[i])
+    ## Parse RDF
+    supported_formats = ["json-ld", "turtle", "xml", "nt", "n3"]
+    parsed_successfully = False
+    for format in supported_formats:
+        try:
+            temp_graph = rdflib.Graph()
+            temp_graph.parse(data=raw_data, format=format)
+
+            # If parsing succeeds without an exception
+            rdf_graph = temp_graph
+            parsed_successfully = True
+            #print(f"Successfully parsed input data as {format}.")
+            break
+        except Exception as e:
+            print(f"Attempt to parse as '{format}' failed: {e}")
+            continue
+
+    if not parsed_successfully:
+        raise TypeError(f"Input data could not be parsed in any supported RDF format: {supported_formats}")
+
+    ntriple_data = rdf_graph.serialize(format="nt")
+
+    rdf_data = []
+    # Separate data
+    for line in ntriple_data.split("\n"):
+        line = line.strip()
+        if line == "":
+            continue
+
+        line_parts = tokenizer(line)      
+
+        # Decode iri safety
+        for i in range(len(line_parts)):
+            line_parts[i] = decode_safe_iri(line_parts[i])
 
 
-            # Hanlde without graph
-            if len(line_parts) == 4:
-                x = Quad(line_parts[0], line_parts[1], line_parts[2], "")
-                rdf_data.append(x)
-            elif len(line_parts) == 5:
-                x = Quad(line_parts[0], line_parts[1], line_parts[2], line_parts[3])
-                rdf_data.append(x)
-            else:
-                print("Error parsing data. Found:", line_parts)
+        # Hanlde without graph
+        if len(line_parts) == 4:
+            x = Quad(line_parts[0], line_parts[1], line_parts[2], "")
+            rdf_data.append(x)
+        elif len(line_parts) == 5:
+            x = Quad(line_parts[0], line_parts[1], line_parts[2], line_parts[3])
+            rdf_data.append(x)
+        else:
+            print("Error parsing data. Found:", line_parts)
     return rdf_data
 
 # Remove < >, " ", _: from string 
