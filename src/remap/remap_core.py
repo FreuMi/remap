@@ -1,25 +1,18 @@
 import pandas as pd
+from io import StringIO
 from rdflib import Graph, Namespace, URIRef
-import rdflib
 import sys
-from dataclasses import dataclass
-import graph_builder
 import re
-import argparse
 from urllib.parse import urlparse, quote
-import vocabulary as voc
+from .vocabulary import *
 import logging
+from .helper import *
+
+from .graph_builder import build_sub_graph_join, build_sub_graph
+from .utils import parse, parse_rdf_as_nt
 
 # Suppress warnings of rdflib
 logging.getLogger("rdflib").setLevel(logging.ERROR)  
-
-# Class to store quad data
-@dataclass
-class Quad:
-    s: str
-    p: str
-    o: str
-    g: str
 
 def encode_uris(graph):
     updated_graph = Graph()
@@ -58,7 +51,7 @@ def remove_graph(reference_g: Graph, graphs: list[Graph]) -> list[Graph]:
 
 def is_join_graph(g):
     for s,p,o in g:
-        if o == voc.REF_OBJ_MAP:
+        if o == REF_OBJ_MAP:
             return True
     return False
 
@@ -132,114 +125,7 @@ def get_term_type(data: str) -> str:
 
     return res
 
-
-def tokenizer(input_val: str) -> list[str]:
-    result = []
-    in_quotation = False
-    word = ""
-    
-    for char in input_val:
-        if char == "\"":
-            # Toggle the in_quotation flag
-            in_quotation = not in_quotation
-            word += char 
-        elif char == " ":
-            if in_quotation:
-                # Inside quotes, spaces are part of the word
-                word += char
-            else:
-                # Outside quotes, space marks the end of a word
-                if word:
-                    result.append(word)
-                    word = ""
-        else:
-            # Add other characters to the current word
-            word += char
-    
-    # Append the last word if it exists
-    if word:
-        result.append(word)
-    
-    return result
-
-
-def decode_safe_iri(safe_iri: str) -> str:
-    # Reverse lookup table for decoding
-    decode_map = {
-        "%20": " ", "%21": "!", "%22": "\"", "%23": "#", "%24": "$",
-        "%25": "%", "%26": "&", "%27": "'", "%28": "(", "%29": ")",
-        "%2A": "*", "%2B": "+", "%2C": ",", "%2F": "/", "%3A": ":",
-        "%3B": ";", "%3C": "<", "%3D": "=", "%3E": ">", "%3F": "?",
-        "%40": "@", "%5B": "[", "%5C": "\\", "%5D": "]", "%7B": "{",
-        "%7C": "|", "%7D": "}"
-    }
-
-    # Create a regex pattern to match all encoded sequences in the string
-    pattern = re.compile(r"%[0-9A-Fa-f]{2}")
-
-    # Function to replace matched encoded symbols with their decoded values
-    def decode_match(match):
-        encoded = match.group(0)
-        return decode_map.get(encoded, encoded)  # Return the decoded character or keep as-is
-
-    # Use re.sub to perform decoding
-    decoded_string = pattern.sub(decode_match, safe_iri)
-
-    return decoded_string
-
-
-# funciton to parse rdf data in nquads
-def parse(path: str) -> list[Quad]:
-    # Load data from file
-    with open(path, 'r') as f:
-        raw_data = f.read()
-
-    ## Parse RDF
-    supported_formats = ["json-ld", "turtle", "xml", "nt", "n3"]
-    parsed_successfully = False
-    for format in supported_formats:
-        try:
-            temp_graph = rdflib.Graph()
-            temp_graph.parse(data=raw_data, format=format)
-
-            # If parsing succeeds without an exception
-            rdf_graph = temp_graph
-            parsed_successfully = True
-            #print(f"Successfully parsed input data as {format}.")
-            break
-        except Exception as e:
-            print(f"Attempt to parse as '{format}' failed: {e}")
-            continue
-
-    if not parsed_successfully:
-        raise TypeError(f"Input data could not be parsed in any supported RDF format: {supported_formats}")
-
-    ntriple_data = rdf_graph.serialize(format="nt")
-
-    rdf_data = []
-    # Separate data
-    for line in ntriple_data.split("\n"):
-        line = line.strip()
-        if line == "":
-            continue
-
-        line_parts = tokenizer(line)      
-
-        # Decode iri safety
-        for i in range(len(line_parts)):
-            line_parts[i] = decode_safe_iri(line_parts[i])
-
-
-        # Hanlde without graph
-        if len(line_parts) == 4:
-            x = Quad(line_parts[0], line_parts[1], line_parts[2], "")
-            rdf_data.append(x)
-        elif len(line_parts) == 5:
-            x = Quad(line_parts[0], line_parts[1], line_parts[2], line_parts[3])
-            rdf_data.append(x)
-        else:
-            print("Error parsing data. Found:", line_parts)
-    return rdf_data
+#################################################################################################
 
 # Remove < >, " ", _: from string 
 def clean_entry(entry: str) -> tuple[str,str]:
@@ -316,81 +202,6 @@ def isLiteral(value: str) -> bool:
     else: 
         return False
 
-def getPath(graph: Graph) -> str:
-    for s,p,o in graph:
-        if str(p) == "http://w3id.org/rml/path":
-            return str(o)   
-
-def getSubject(graph: Graph) -> tuple[str,str]:
-    subjectMap = ""
-    for s,p,o in graph:
-        if str(p) == "http://w3id.org/rml/subjectMap":
-            subjectMap = str(o)
-            break
-    for s,p,o in graph:
-        if str(s) == subjectMap:
-            if str(p) == "http://w3id.org/rml/constant":
-                return str(o), "constant"
-            elif str(p) == "http://w3id.org/rml/reference":
-                return str(o), "reference"
-            elif str(p) == "http://w3id.org/rml/template":
-                return str(o), "template"
-            
-    print("Error in getSubject")
-    sys.exit(1)
-            
-def getPredicate(graph: Graph) -> tuple[str,str]:
-    predicateMap = ""
-    for s,p,o in graph:
-        if str(p) == "http://w3id.org/rml/predicateMap":
-            predicateMap = str(o)
-            break
-    
-    for s,p,o in graph:
-        if str(s) == predicateMap:
-            if str(p) == "http://w3id.org/rml/constant":
-                return str(o), "constant"
-            elif str(p) == "http://w3id.org/rml/reference":
-                return str(o), "reference"
-            elif str(p) == "http://w3id.org/rml/template":
-                return str(o), "template"
-    
-    print("Error in getPredicate")
-    sys.exit(1)
-            
-def getObject(graph: Graph) -> tuple[str,str]:
-    objectMap = ""
-    for s,p,o in graph:
-        if str(p) == "http://w3id.org/rml/objectMap":
-            objectMap = str(o)
-            break
-    for s,p,o in graph:
-        if str(s) == objectMap:
-            if str(p) == "http://w3id.org/rml/constant":
-                return str(o), "constant"
-            elif str(p) == "http://w3id.org/rml/reference":
-                return str(o), "reference"
-            elif str(p) == "http://w3id.org/rml/template":
-                return str(o), "template"
-    print("Error in getObject")
-    sys.exit(1)
-
-def getGraph(graph: Graph) -> tuple[str,str]:
-    graphMap = ""
-    for s,p,o in graph:
-        if str(p) == "http://w3id.org/rml/graphMap":
-            graphMap = str(o)
-            break
-    for s,p,o in graph:
-        if str(s) == graphMap:
-            if str(p) == "http://w3id.org/rml/constant":
-                return str(o), "constant"
-            elif str(p) == "http://w3id.org/rml/reference":
-                return str(o), "reference"
-            elif str(p) == "http://w3id.org/rml/template":
-                return str(o), "template"
-    return "", ""
-
 def extract_information(graph: Graph) -> tuple[str,str,str,str,str,str,str,str]:
     # Get source path 
     new_path = getPath(graph)
@@ -407,12 +218,12 @@ def extract_information(graph: Graph) -> tuple[str,str,str,str,str,str,str,str]:
 
 def get_parent(g: Graph) -> str:
     for s,p,o in g:
-        if p == voc.PARENT:
+        if p == PARENT:
             return str(o)
 
 def get_child(g: Graph) -> str:
     for s,p,o in g:
-        if p == voc.CHILD:
+        if p == CHILD:
             return str(o)
 
 def extract_information_join(graph1: Graph, graph2: Graph) -> tuple[str,str,str,str,str,str,str,str]:
@@ -799,40 +610,41 @@ def get_invar(term_map, term_map_type):
         print("ERR")
         sys.exit(1)
 
-def main():
-    # Config
-    file_path_csv = ""
-    file_path_rdf = ""
-    base_uri = "http://example.com/base/"
-    output_file = "generated_mapping.ttl"
+def generate_rml_from_file(file_path_rdf: str, file_path_csv, base_uri: str = "http://example.com/base/"):
 
-    parser = argparse.ArgumentParser(description="A simple CLI example")
-    parser.add_argument("--csv", type=str, nargs="+", help="Paths to one or more CSV files")
-    parser.add_argument("--rdf", type=str, help="The path to the RDF file")
+    # Load RDF
+    with open(file_path_rdf, "r") as f:
+        raw_rdf_data = f.read()
 
-    args = parser.parse_args()
+    raw_csv_data = []
+    for csv_path in file_path_csv:
+        with open(csv_path, "r") as f:
+            data = f.read()
+            raw_csv_data.append(data)
 
-    if args.csv:
-        file_path_csv = args.csv
-    if args.rdf:
-        file_path_rdf = args.rdf
+    
+    return generate_rml(raw_rdf_data, raw_csv_data, base_uri, file_path_csv)
 
-    if file_path_csv == "":
-        print("--csv is required!")
-        sys.exit(1)
-    if file_path_rdf == "":
-        print("--rdf is required!")
-        sys.exit(1)
-
+def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.com/base/", csv_paths = []) -> str:
     print("Starting...")
     # Load RDF data
-    rdf_data = parse(file_path_rdf)
+    ntriple = parse_rdf_as_nt(raw_rdf_data)
+
+    # Parse data
+    rdf_data = parse(ntriple)
+
     rml_sub_graphs = []
     stored_data = {}
 
-    for csv_path in file_path_csv:
+    if len(csv_paths) == 0:
+        for i in range(len(csv_data)):
+            csv_paths.append(f"data{i}")
+
+    for i in range(len(csv_data)):
+        csv_text = csv_data[i]
+        csv_path = csv_paths[i]
         # Load csv data
-        data: pd.DataFrame = pd.read_csv(csv_path, dtype=str)
+        data: pd.DataFrame = pd.read_csv(StringIO(csv_text), dtype=str)
         data = data.drop_duplicates()
         data = data.fillna("None")
 
@@ -1040,7 +852,7 @@ def main():
                     lang_tag_term_map = lang_tag_term_map.replace("abbb______", "\\")
 
                 ## Build rml graph ##
-                tmp_rml_sub_graph = graph_builder.build_sub_graph(csv_path, s_term_map, s_term_map_type, s_term_type,\
+                tmp_rml_sub_graph = build_sub_graph(csv_path, s_term_map, s_term_map_type, s_term_type,\
                                                             p_term_map, p_term_map_type, p_term_type, \
                                                             o_term_map, o_term_map_type, o_term_type, \
                                                             g_term_type, g_term_map, g_term_map_type, \
@@ -1165,12 +977,12 @@ def main():
                 continue
 
             # If we arrive here, generate the mapping
-            new_join_graph = graph_builder.build_sub_graph_join(g, g2)
+            new_join_graph = build_sub_graph_join(g, g2)
             join_graphs.append(new_join_graph)
             graphs_to_remove.append(g)
             graphs_to_remove.append(g2)
             
-    # Remvoe graphs that are used in join
+    # Remove graphs that are used in join
     for g in graphs_to_remove:
         rml_sub_graphs = remove_graph(g, rml_sub_graphs)
     
@@ -1283,12 +1095,5 @@ def main():
     if str_result_graph.strip() == f"@base <{base_uri}> .":
         print("An unknown error occured. Could not generate RML mapping document.")
         sys.exit(1)
-    
-    # Write to file.
-    with open(output_file, "w") as file:
-        file.write(str_result_graph)
 
-    print("Finished. Generated mapping stored in:", output_file)
-
-if __name__ == "__main__":  
-    main()
+    return str_result_graph

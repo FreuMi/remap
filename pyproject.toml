@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "remap"
+version = "0.1.0"
+description = "ReMap: Reverse Engineering of RML Mappings"
+requires-python = ">=3.9"
+dependencies = [
+  "numpy==2.2.2",
+  "pandas==2.2.3",
+  "pyparsing==3.3.2",
+  "python-dateutil==2.9.0.post0",
+  "pytz==2025.1",
+  "rdflib>=7.2.0",
+  "six==1.17.0",
+  "tzdata==2025.1",
+]
+
+[project.scripts]
+remap = "remap.remap_cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

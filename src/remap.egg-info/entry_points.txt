@@ -1,0 +1,2 @@
+[console_scripts]
+remap = remap.remap_cli:main

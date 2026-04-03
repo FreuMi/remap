@@ -1,59 +1,111 @@
 # ReMap: RML Mapping Reverse Engineering
 
-This tool **reverse engineers an RML mapping document** for a given CSV source data and RDF output graph. The generated mapping document is functionally equivalent to the original **unknown RML mapping**, ensuring it produces the same RDF output but may use different RML constructs.
+ReMap reverse engineers an RML mapping document from CSV source data and an RDF output graph. The generated mapping is functionally equivalent to the original unknown RML mapping, even if it uses different RML constructs internally.
 
-**Tested on Python 3.12.3 (Ubuntu 24.04)**.
+The project now ships as an installable Python package with:
 
----
+- a library API under `src/remap`
+- a CLI entrypoint exposed as `remap`
+
+Tested on Python 3.12.3 on Ubuntu 24.04.
 
 ## Installation
 
-1. **Clone the repository:**
-   ```bash
-   git clone git@github.com:FreuMi/remap.git
-   cd mapping_generator
-    ```
-2. **(Optional) Create a virtual environment**:
-    ```bash
-   python3 -m venv venv
-    source venv/bin/activate 
-    ```
-3. **Install dependencies:**
-    ```bash
-   pip install -r requirements.txt
-    ```
+Clone the repository and install it as a package:
 
-## Compilation
-In order to compile the project we use [Nuitka](https://nuitka.net/).
-
-1. **Install required packages**
 ```bash
-   pip install nuitka
-   pip install -r requirements.txt
-   sudo apt install python3-dev patchelf build-essential
-```
-2. **Start compilation**
-```bash
-nuitka --standalone --onefile --include-package=rdflib remap.py
+git clone git@github.com:FreuMi/remap.git
+cd remap
+python3 -m venv .venv
+source .venv/bin/activate
+pip install .
 ```
 
-## Usage
-Run the tool with python:
+For editable local development:
+
 ```bash
-   python3 remap.py --csv [LIST OF CSV INPUT FILES] --rdf RDF_OUTPUT_FILE
+pip install -e .
 ```
 
-Run the compiled tool:
+If you only want the dependencies without installing the package itself:
+
 ```bash
-   ./remap.bin --csv [LIST OF CSV INPUT FILES] --rdf RDF_OUTPUT_FILE
+pip install -r requirements.txt
 ```
 
-## Example Usage
-If you have two input CSV files (`sport.csv` and `student.csv`) and an RDF output file (`output.nq`), execute:
+## CLI Usage
+
+After installation, run:
+
 ```bash
-   python3 remap.py --csv sport.csv student.csv --rdf output.nq
+remap --csv [LIST OF CSV INPUT FILES] --rdf RDF_OUTPUT_FILE
 ```
-This will generate an RML mapping document that, when executed, produces the same RDF output graph.
+
+Example:
+
+```bash
+remap --csv sport.csv student.csv --rdf output.nq
+```
+
+This generates `generated_mapping.ttl` in the current working directory.
+
+The CLI currently assumes the base URI `http://example.com/base/`.
+
+## Library Usage
+
+ReMap can also be used as a Python library.
+
+Generate a mapping from file paths:
+
+```python
+from remap import generate_rml_from_file
+
+mapping_ttl = generate_rml_from_file(
+    "output.nq",
+    ["sport.csv", "student.csv"],
+)
+
+print(mapping_ttl)
+```
+
+Generate a mapping from in-memory RDF and CSV content:
+
+```python
+from remap import generate_rml
+
+with open("output.nq", "r", encoding="utf-8") as rdf_file:
+    rdf_data = rdf_file.read()
+
+csv_data = []
+for path in ["sport.csv", "student.csv"]:
+    with open(path, "r", encoding="utf-8") as csv_file:
+        csv_data.append(csv_file.read())
+
+mapping_ttl = generate_rml(
+    rdf_data,
+    csv_data,
+    base_uri="http://example.com/base/",
+    csv_paths=["sport.csv", "student.csv"],
+)
+```
+
+## Build
+
+If you still want to compile the CLI into a standalone binary with [Nuitka](https://nuitka.net/), use the package entrypoint instead of the top-level `remap.py` script.
+
+Install build requirements:
+
+```bash
+pip install nuitka
+pip install .
+sudo apt install python3-dev patchelf build-essential
+```
+
+Then compile:
+
+```bash
+nuitka --standalone --onefile --include-package=remap -m remap.remap_cli
+```
 
 ## Citation
 
@@ -67,5 +119,6 @@ If you use this work, please cite:
 }
 ```
 
-##  License
-This project is licensed under the GNU Affero General Public License version 3 (AGPLv3). The full text of the license can be found in the `LICENSE` file in this repository.
+## License
+
+This project is licensed under the GNU Affero General Public License version 3 (AGPLv3). See `LICENSE`.
