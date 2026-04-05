@@ -1115,12 +1115,22 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
     # Final result
     rml_sub_graphs = filtered_graphs
 
-    # Print output
-    result_graph = Graph()
+    # Combine graphs with same subject
+    rml_sub_graphs_merged = merge_triples_maps(rml_sub_graphs)
+
+    # remove rml:constant only when the same subjectMap also has rml:termType rml:BlankNode
     # Set RML namespace
     RML = Namespace("http://w3id.org/rml/")
+    for rml_sub_graph in rml_sub_graphs_merged:
+        for sm in list(rml_sub_graph.objects(None, RML.subjectMap)):
+            if (sm, RML.termType, RML.BlankNode) in rml_sub_graph:
+                rml_sub_graph.remove((sm, RML.constant, None))
+
+
+    # Print output
+    result_graph = Graph()
     result_graph.bind("rml", RML)
-    for rml_sub_graph in rml_sub_graphs:
+    for rml_sub_graph in rml_sub_graphs_merged:
                 result_graph += rml_sub_graph
 
 

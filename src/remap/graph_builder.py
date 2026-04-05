@@ -47,28 +47,33 @@ def add_subject(g: Graph, tm_name: str, term_map: str, term_map_type: str, term_
 
     g.add((URIRef(tm_name), SUBJECT_MAP, bn1))
 
-    # Add term map and term map type
-    if term_map_type == "template":
-        g.add((bn1, TEMPLATE, Literal(term_map)))
-    elif term_map_type == "reference":
-        g.add((bn1, REFERENCE, Literal(term_map)))
-    elif term_map_type == "constant":
+     # If constant & blanknode
+    if term_map_type == "constant" and term_type == "blanknode":
+        g.add((bn1, TERM_TYPE, BLANKNODE))
         g.add((bn1, CONSTANT, URIRef(term_map)))
     else:
-        print("Error: Subject term_map_type unsupported! Found", term_map_type)
-        sys.exit(1)
-
-    # Add term_type
-    if term_map_type != "constant":
-        if term_type == "iri":
-            g.add((bn1, TERM_TYPE, IRI))
-        elif term_type == "blanknode":
-            g.add((bn1, TERM_TYPE, BLANKNODE))
-        elif term_type == "literal":
-            g.add((bn1, TERM_TYPE, LITERAL))
+        # Add term map and term map type
+        if term_map_type == "template":
+            g.add((bn1, TEMPLATE, Literal(term_map)))
+        elif term_map_type == "reference":
+            g.add((bn1, REFERENCE, Literal(term_map)))
+        elif term_map_type == "constant":
+            g.add((bn1, CONSTANT, URIRef(term_map)))
         else:
-            print("Error: Subject term_type unsupported!")
+            print("Error: Subject term_map_type unsupported! Found", term_map_type)
             sys.exit(1)
+        
+        # Add term_type
+        if term_map_type != "constant":
+            if term_type == "iri":
+                g.add((bn1, TERM_TYPE, IRI))
+            elif term_type == "blanknode":
+                g.add((bn1, TERM_TYPE, BLANKNODE))
+            elif term_type == "literal":
+                g.add((bn1, TERM_TYPE, LITERAL))
+            else:
+                print("Error: Subject term_type unsupported!")
+                sys.exit(1)
 
     ## Add graph if needed
     if g_term_map_type == "":
