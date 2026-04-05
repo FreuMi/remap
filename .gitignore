@@ -7,3 +7,4 @@ mapping.ttl
 remap.build
 remap.dist
 remap.bin
+remap.egg-info

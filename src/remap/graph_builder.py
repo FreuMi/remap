@@ -22,7 +22,7 @@ def init_template(g: Graph) -> str:
     return tm_name
 
 # Add logical source triples
-def add_logical_source(g: Graph, tm_name: str, path: str) -> None:
+def add_logical_source(g: Graph, tm_name: str, path: str, is_json_data: bool) -> None:
     # Generate blank nodes
     bn1 = BNode()
     bn2 = BNode()
@@ -30,7 +30,12 @@ def add_logical_source(g: Graph, tm_name: str, path: str) -> None:
     # Add to graph
     g.add((URIRef(tm_name), LOGICAL_SOURCE, bn1))
     g.add((bn1, RDF_TYPE, LOGICAL_SOURCE_CLASS))
-    g.add((bn1, REF_FORMULATION, CSV_FORMAT)) # Only support for csv
+    if not is_json_data:
+        g.add((bn1, REF_FORMULATION, CSV_FORMAT)) # CSV
+    else:
+        g.add((bn1, REF_FORMULATION, JSON_FORMAT)) # JSON
+        g.add((bn1, ITERATOR, Literal("$")))
+
     g.add((bn1, SOURCE, bn2))
     g.add((bn2, RDF_TYPE, PATH_SOURCE_CLASS))
     g.add((bn2, ROOT_DIR, MAPPING_DIR))
@@ -54,15 +59,16 @@ def add_subject(g: Graph, tm_name: str, term_map: str, term_map_type: str, term_
         sys.exit(1)
 
     # Add term_type
-    if term_type == "iri":
-        g.add((bn1, TERM_TYPE, IRI))
-    elif term_type == "blanknode":
-        g.add((bn1, TERM_TYPE, BLANKNODE))
-    elif term_type == "literal":
-        g.add((bn1, TERM_TYPE, LITERAL))
-    else:
-        print("Error: Subject term_type unsupported!")
-        sys.exit(1)
+    if term_map_type != "constant":
+        if term_type == "iri":
+            g.add((bn1, TERM_TYPE, IRI))
+        elif term_type == "blanknode":
+            g.add((bn1, TERM_TYPE, BLANKNODE))
+        elif term_type == "literal":
+            g.add((bn1, TERM_TYPE, LITERAL))
+        else:
+            print("Error: Subject term_type unsupported!")
+            sys.exit(1)
 
     ## Add graph if needed
     if g_term_map_type == "":
@@ -120,16 +126,17 @@ def add_predicate_object_map(g: Graph, tm_name: str,\
     else:
         print("Error: Object term_map_type unsupported! Found", o_term_map_type)
         sys.exit(1)
- 
-    if o_term_type == "iri":
-        g.add((bn3, TERM_TYPE, IRI))
-    elif o_term_type == "blanknode":
-        g.add((bn3, TERM_TYPE, BLANKNODE))
-    elif o_term_type == "literal":
-        g.add((bn3, TERM_TYPE, LITERAL))
-    else:
-        print("Error: Predicate term_type unsupported!")
-        sys.exit(1)
+    
+    if o_term_map_type != "constant":
+        if o_term_type == "iri":
+            g.add((bn3, TERM_TYPE, IRI))
+        elif o_term_type == "blanknode":
+            g.add((bn3, TERM_TYPE, BLANKNODE))
+        elif o_term_type == "literal":
+            g.add((bn3, TERM_TYPE, LITERAL))
+        else:
+            print("Error: Predicate term_type unsupported!")
+            sys.exit(1)
 
     # Add datatype map 
     if data_type_term_type != "":
@@ -182,7 +189,7 @@ def add_predicate_object_map_join(g: Graph, tm_name: str,\
     # Add parent tm
     g.add((bn3, PARENT_TM, URIRef(tm2)))
 
-def build_sub_graph(file_path_csv: str, s_term_map: str, s_term_map_type: str, s_term_type: str,\
+def build_sub_graph(file_path_csv: str, is_json_data: bool, s_term_map: str, s_term_map_type: str, s_term_type: str,\
                     p_term_map: str, p_term_map_type: str, p_term_type: str,\
                     o_term_map: str, o_term_map_type: str, o_term_type: str,\
                     g_term_type: str, g_term_map: str, g_term_map_type: str,\
@@ -194,7 +201,7 @@ def build_sub_graph(file_path_csv: str, s_term_map: str, s_term_map_type: str, s
     rml_sub_graph.bind("rml", RML)
     
     tm = init_template(rml_sub_graph)
-    add_logical_source(rml_sub_graph, tm, file_path_csv)
+    add_logical_source(rml_sub_graph, tm, file_path_csv, is_json_data)
     add_subject(rml_sub_graph, tm, s_term_map, s_term_map_type, s_term_type, g_term_type, g_term_map, g_term_map_type)
     add_predicate_object_map(rml_sub_graph, tm, p_term_map, p_term_map_type, p_term_type,\
                             o_term_map, o_term_map_type, o_term_type,\

@@ -10,6 +10,9 @@ from .helper import *
 
 from .graph_builder import build_sub_graph_join, build_sub_graph
 from .utils import parse, parse_rdf_as_nt
+import json
+import io
+import csv
 
 # Suppress warnings of rdflib
 logging.getLogger("rdflib").setLevel(logging.ERROR)  
@@ -610,6 +613,38 @@ def get_invar(term_map, term_map_type):
         print("ERR")
         sys.exit(1)
 
+##########################################################################################
+
+def is_valid_json(s: str) -> bool:
+    try:
+        json.loads(s)
+        return True
+    except json.JSONDecodeError:
+        return False
+
+def dict_to_csv_string(d):
+    flat = flatten_dict(d)
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=flat.keys())
+    writer.writeheader()
+    writer.writerow(flat)
+
+    return output.getvalue()
+
+def flatten_dict(d, parent_key="", sep="."):
+    if isinstance(d, str):
+        d = json.loads(d)
+    items = {}
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.update(flatten_dict(v, new_key, sep=sep))
+        else:
+            items[new_key] = v
+        
+    return items
+
 def generate_rml_from_file(file_path_rdf: str, file_path_csv, base_uri: str = "http://example.com/base/"):
 
     # Load RDF
@@ -635,13 +670,21 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
 
     rml_sub_graphs = []
     stored_data = {}
-
+    
     if len(csv_paths) == 0:
         for i in range(len(csv_data)):
             csv_paths.append(f"data{i}")
 
     for i in range(len(csv_data)):
         csv_text = csv_data[i]
+        is_json_data = False
+
+        # Test if json
+        if is_valid_json(csv_text):
+            # Convert to csv
+            csv_text = dict_to_csv_string(csv_text)
+            is_json_data = True
+
         csv_path = csv_paths[i]
         # Load csv data
         data: pd.DataFrame = pd.read_csv(StringIO(csv_text), dtype=str)
@@ -852,7 +895,7 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                     lang_tag_term_map = lang_tag_term_map.replace("abbb______", "\\")
 
                 ## Build rml graph ##
-                tmp_rml_sub_graph = build_sub_graph(csv_path, s_term_map, s_term_map_type, s_term_type,\
+                tmp_rml_sub_graph = build_sub_graph(csv_path, is_json_data, s_term_map, s_term_map_type, s_term_type,\
                                                             p_term_map, p_term_map_type, p_term_type, \
                                                             o_term_map, o_term_map_type, o_term_type, \
                                                             g_term_type, g_term_map, g_term_map_type, \
