@@ -14,6 +14,8 @@ import json
 import io
 import csv
 
+DEBUG = False
+
 # Suppress warnings of rdflib
 logging.getLogger("rdflib").setLevel(logging.ERROR)  
 
@@ -645,7 +647,7 @@ def flatten_dict(d, parent_key="", sep="."):
         
     return items
 
-def generate_rml_from_file(file_path_rdf: str, file_path_csv, base_uri: str = "http://example.com/base/"):
+def generate_rml_from_file(file_path_rdf: str, file_path_csv, base_uri: str = "http://example.com/base/", debug_log = False):
 
     # Load RDF
     with open(file_path_rdf, "r") as f:
@@ -658,10 +660,13 @@ def generate_rml_from_file(file_path_rdf: str, file_path_csv, base_uri: str = "h
             raw_csv_data.append(data)
 
     
-    return generate_rml(raw_rdf_data, raw_csv_data, base_uri, file_path_csv)
+    return generate_rml(raw_rdf_data, raw_csv_data, base_uri, file_path_csv, debug_log)
 
-def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.com/base/", csv_paths = []) -> str:
-    print("Starting...")
+def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.com/base/", csv_paths = [], debug_log = False) -> str:
+    DEBUG = debug_log
+    
+    if DEBUG:
+        print("Starting...")
     # Load RDF data
     ntriple = parse_rdf_as_nt(raw_rdf_data)
 
@@ -702,7 +707,8 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
         # Store generated graphs for this interation
         tmp_rml_sub_graphs = []
 
-        print(f"Processing {len(data)} entries...")
+        if DEBUG:
+            print(f"Processing {len(data)} entries...")
     
         # Iterate over all csv data
         for _, row in data.iterrows():
@@ -972,8 +978,9 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
         # Print the final filtered graphs
         for fg in filtered_graphs:
             rml_sub_graphs.append(fg)
-        
-        print(f"Finished processing: {csv_path}")
+
+        if DEBUG: 
+            print(f"Finished processing: {csv_path}")
     
     ### Identify joins
     join_graphs = []
