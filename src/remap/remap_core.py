@@ -13,6 +13,7 @@ from .utils import parse, parse_rdf_as_nt
 import json
 import io
 import csv
+from collections.abc import Mapping
 
 DEBUG = False
 
@@ -615,6 +616,17 @@ def get_invar(term_map, term_map_type):
         print("ERR")
         sys.exit(1)
 
+
+def normalize_literal_term_map(term_map: str, term_map_type: str, term_type: str) -> tuple[str, str]:
+    if term_type != "literal" or term_map_type != "template":
+        return term_map, term_map_type
+
+    match = re.fullmatch(r"\{([^{}]+)\}", term_map)
+    if match is None:
+        return term_map, term_map_type
+
+    return match.group(1), "reference"
+
 ##########################################################################################
 
 def is_valid_json(s: str) -> bool:
@@ -624,28 +636,101 @@ def is_valid_json(s: str) -> bool:
     except json.JSONDecodeError:
         return False
 
-def dict_to_csv_string(d):
-    flat = flatten_dict(d)
-
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=flat.keys())
-    writer.writeheader()
-    writer.writerow(flat)
-
-    return output.getvalue()
-
 def flatten_dict(d, parent_key="", sep="."):
     if isinstance(d, str):
         d = json.loads(d)
     items = {}
     for k, v in d.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k
-        if isinstance(v, dict):
+        if isinstance(v, Mapping):
             items.update(flatten_dict(v, new_key, sep=sep))
+        elif isinstance(v, list):
+            items[new_key] = json.dumps(v, ensure_ascii=False)
         else:
             items[new_key] = v
-        
+
     return items
+
+
+def extract_json_records(raw_json_text: str) -> tuple[list[dict], str]:
+    data = json.loads(raw_json_text)
+
+    if isinstance(data, list):
+        return data, "$[*]"
+
+    if isinstance(data, dict):
+        list_entries = [
+            (key, value)
+            for key, value in data.items()
+            if isinstance(value, list)
+        ]
+        if len(list_entries) == 1 and all(
+            isinstance(entry, Mapping) for entry in list_entries[0][1]
+        ):
+            key, value = list_entries[0]
+            return value, f"$.{key}[*]"
+        return [data], "$"
+
+    return [{"value": data}], "$"
+
+
+def json_to_dataframe(raw_json_text: str) -> tuple[pd.DataFrame, str]:
+    records, iterator = extract_json_records(raw_json_text)
+    flattened_records = []
+    for record in records:
+        if isinstance(record, Mapping):
+            flat_record = flatten_dict(record)
+        else:
+            flat_record = {"value": record}
+        flattened_records.append(
+            {
+                f"$.{key}": "None" if value is None else str(value)
+                for key, value in flat_record.items()
+            }
+        )
+
+    if not flattened_records:
+        return pd.DataFrame(), iterator
+
+    return pd.DataFrame(flattened_records, dtype=str), iterator
+
+
+def build_empty_mapping(
+    source_path: str,
+    is_json_data: bool,
+    json_iterator: str,
+    base_uri: str,
+) -> str:
+    empty_graph = build_sub_graph(
+        source_path,
+        is_json_data,
+        json_iterator,
+        f"{base_uri}empty-subject",
+        "constant",
+        "iri",
+        f"{base_uri}empty-predicate",
+        "constant",
+        "iri",
+        "empty-object",
+        "constant",
+        "literal",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+    )
+    result_graph = Graph()
+    result_graph.bind("rml", Namespace("http://w3id.org/rml/"))
+    result_graph += empty_graph
+    str_result_graph = result_graph.serialize(format="turtle")
+    if base_uri != "":
+        str_result_graph = f"@base <{base_uri}> .\n" + str_result_graph
+    return str_result_graph
 
 def generate_rml_from_file(file_path_rdf: str, file_path_csv, base_uri: str = "http://example.com/base/", debug_log = False):
 
@@ -662,7 +747,7 @@ def generate_rml_from_file(file_path_rdf: str, file_path_csv, base_uri: str = "h
     
     return generate_rml(raw_rdf_data, raw_csv_data, base_uri, file_path_csv, debug_log)
 
-def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.com/base/", csv_paths = [], debug_log = False) -> str:
+def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.com/base/", csv_paths = None, debug_log = False) -> str:
     DEBUG = debug_log
     
     if DEBUG:
@@ -675,24 +760,37 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
 
     rml_sub_graphs = []
     stored_data = {}
-    
+
+    if csv_paths is None:
+        csv_paths = []
+    else:
+        csv_paths = list(csv_paths)
+
     if len(csv_paths) == 0:
         for i in range(len(csv_data)):
             csv_paths.append(f"data{i}")
 
+    if len(rdf_data) == 0:
+        csv_text = csv_data[0] if len(csv_data) > 0 else ""
+        source_path = csv_paths[0] if len(csv_paths) > 0 else "data0"
+        if is_valid_json(csv_text):
+            _, json_iterator = json_to_dataframe(csv_text)
+            return build_empty_mapping(source_path, True, json_iterator, base_uri)
+        return build_empty_mapping(source_path, False, "$", base_uri)
+
     for i in range(len(csv_data)):
         csv_text = csv_data[i]
         is_json_data = False
+        json_iterator = "$"
 
         # Test if json
         if is_valid_json(csv_text):
-            # Convert to csv
-            csv_text = dict_to_csv_string(csv_text)
             is_json_data = True
+            data, json_iterator = json_to_dataframe(csv_text)
+        else:
+            data = pd.read_csv(StringIO(csv_text), dtype=str)
 
         csv_path = csv_paths[i]
-        # Load csv data
-        data: pd.DataFrame = pd.read_csv(StringIO(csv_text), dtype=str)
         data = data.drop_duplicates()
         data = data.fillna("None")
 
@@ -802,6 +900,9 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                 o_term_map = o_term_map.replace("ab____", "\\\\{")
                 o_term_map = o_term_map.replace("abb_____", "\\\\}")
                 o_term_map = o_term_map.replace("abbb______", "\\")
+                o_term_map, o_term_map_type = normalize_literal_term_map(
+                    o_term_map, o_term_map_type, o_term_type
+                )
 
                 ## Handle graph ##
                 g_term_type = "iri"
@@ -901,7 +1002,7 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                     lang_tag_term_map = lang_tag_term_map.replace("abbb______", "\\")
 
                 ## Build rml graph ##
-                tmp_rml_sub_graph = build_sub_graph(csv_path, is_json_data, s_term_map, s_term_map_type, s_term_type,\
+                tmp_rml_sub_graph = build_sub_graph(csv_path, is_json_data, json_iterator, s_term_map, s_term_map_type, s_term_type,\
                                                             p_term_map, p_term_map_type, p_term_type, \
                                                             o_term_map, o_term_map_type, o_term_type, \
                                                             g_term_type, g_term_map, g_term_map_type, \

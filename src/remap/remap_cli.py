@@ -1,7 +1,7 @@
 import sys
 import argparse
 
-from .remap_core import generate_rml
+from .remap_core import generate_rml_from_file
 
 
 def main():
@@ -29,7 +29,7 @@ def main():
         print("--rdf is required!")
         sys.exit(1)
 
-    str_result_graph = generate_rml(file_path_rdf, file_path_csv, base_uri)
+    str_result_graph = generate_rml_from_file(file_path_rdf, file_path_csv, base_uri)
 
     # Write to file.
     with open(output_file, "w") as file:

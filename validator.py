@@ -1,101 +1,233 @@
+import argparse
 import subprocess
-import os
 import sys
+from pathlib import Path
 
-total_cnt = 0
-passed_cnt = 0
 
-def preprocess_line(line):
-    # Replace _: values with a consistent placeholder, since burp generates a unique id
-    return ' '.join(
-        'BLANK_NODE' if part.startswith('_:') else part for part in line.split()
+REPO_ROOT = Path(__file__).resolve().parent
+SRC_DIR = REPO_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from remap import generate_rml
+
+
+IGNORED_CASE_FILES = {
+    "README.md",
+    "mapping.ttl",
+    "output.nq",
+    "generated_mapping.ttl",
+    "materialized_output.nq",
+    "expected_materialized_output.nq",
+    "official_materialized.nq",
+}
+
+
+def preprocess_line(line: str) -> str:
+    # BURP emits fresh blank node ids on every run, so normalize them away.
+    return " ".join(
+        "BLANK_NODE" if part.startswith("_:") else part for part in line.split()
     )
 
-def compare_files(file1, file2):
-    # Read and preprocess lines from the first file into a set
-    print("Loading", file1)
-    with open(file1, 'r') as f1:
-        lines1 = set(preprocess_line(line.strip()) for line in f1)
 
-    print("Loading", file2)
-    # Read and preprocess lines from the second file into a set
-    with open(file2, 'r') as f2:
-        lines2 = set(preprocess_line(line.strip()) for line in f2)
+def compare_files(file1: Path, file2: Path) -> tuple[bool, set[str], set[str]]:
+    with file1.open("r", encoding="utf-8") as f1:
+        lines1 = {
+            preprocess_line(line.strip())
+            for line in f1
+            if line.strip() and not line.lstrip().startswith("#")
+        }
 
-    # Compare the two sets
-    if lines1 == lines2:
-        return True
+    with file2.open("r", encoding="utf-8") as f2:
+        lines2 = {
+            preprocess_line(line.strip())
+            for line in f2
+            if line.strip() and not line.lstrip().startswith("#")
+        }
+
+    return lines1 == lines2, lines1 - lines2, lines2 - lines1
+
+
+def find_input_files(case_dir: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in case_dir.iterdir()
+        if path.is_file() and path.name not in IGNORED_CASE_FILES
+    )
+
+
+def materialize_mapping(
+    mapping_file: Path, output_file: Path, rmlmapper_jar: Path, base_uri: str
+) -> None:
+    command = [
+        "java",
+        "-jar",
+        str(rmlmapper_jar.resolve()),
+        "-m",
+        mapping_file.name,
+        "-o",
+        output_file.name,
+        "-b",
+        base_uri,
+        "-s",
+        "nquads",
+    ]
+    subprocess.run(command, check=True, text=True, cwd=mapping_file.parent)
+
+
+def run_case(
+    case_dir: Path,
+    rmlmapper_jar: Path,
+    keep_artifacts: bool,
+    base_uri: str,
+    compare_mode: str,
+) -> bool:
+    rdf_file = case_dir / "output.nq"
+    reference_mapping = case_dir / "mapping.ttl"
+    generated_mapping = case_dir / "generated_mapping.ttl"
+    materialized_output = case_dir / "materialized_output.nq"
+    expected_materialized_output = case_dir / "expected_materialized_output.nq"
+
+    if not keep_artifacts:
+        generated_mapping.unlink(missing_ok=True)
+        materialized_output.unlink(missing_ok=True)
+        expected_materialized_output.unlink(missing_ok=True)
+
+    input_files = find_input_files(case_dir)
+
+    if not rdf_file.exists():
+        raise FileNotFoundError(f"Missing expected RDF file: {rdf_file}")
+    if not input_files:
+        raise FileNotFoundError(f"No input file found in {case_dir}")
+
+    rdf_data = rdf_file.read_text(encoding="utf-8")
+    input_data = [path.read_text(encoding="utf-8") for path in input_files]
+
+    mapping_ttl = generate_rml(
+        rdf_data,
+        input_data,
+        base_uri=base_uri,
+        csv_paths=[path.name for path in input_files],
+    )
+    generated_mapping.write_text(mapping_ttl, encoding="utf-8")
+
+    materialize_mapping(generated_mapping, materialized_output, rmlmapper_jar, base_uri)
+    if compare_mode == "mapper":
+        if not reference_mapping.exists():
+            raise FileNotFoundError(f"Missing reference mapping: {reference_mapping}")
+        materialize_mapping(
+            reference_mapping,
+            expected_materialized_output,
+            rmlmapper_jar,
+            base_uri,
+        )
+        expected_file = expected_materialized_output
     else:
-        print("The files do not have the same lines.")
-        # Print differences
-        print("Lines only in the first file:", lines1 - lines2)
-        print("Lines only in the second file:", lines2 - lines1)
-        sys.exit()
+        expected_file = rdf_file
 
-def run_console_program(command):
-    try:
-        # Execute the command
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
+    is_equal, only_generated, only_expected = compare_files(materialized_output, expected_file)
 
-        # Print the output of the command
-        # print("Output:\n", result.stdout)
-        if result.stderr:
-            print("Errors:\n", result.stderr)
-            
-    except subprocess.CalledProcessError as e:
-        print(f"Error executing command: {e}")
-        print("Command output:\n", e.output)
+    if not keep_artifacts:
+        generated_mapping.unlink(missing_ok=True)
+        materialized_output.unlink(missing_ok=True)
+        expected_materialized_output.unlink(missing_ok=True)
 
-def get_folder_names(directory):
-    # List all items in the directory and filter only folders
-    folders = [name for name in os.listdir(directory) if os.path.isdir(os.path.join(directory, name))]
-    
-    # Sort the folder names alphabetically
-    return sorted(folders)
+    if not is_equal:
+        print(f"FAILED {case_dir.name}")
+        if only_generated:
+            print("  Only in generated output:")
+            for line in sorted(only_generated):
+                print(f"    {line}")
+        if only_expected:
+            print("  Only in expected output:")
+            for line in sorted(only_expected):
+                print(f"    {line}")
+        return False
+
+    print(f"PASSED {case_dir.name}")
+    return True
 
 
-directory = './csv_test_cases/'
-folders = get_folder_names(directory)
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Validate reverse-engineered mappings against official test cases."
+    )
+    parser.add_argument(
+        "--cases-dir",
+        default="test_cases",
+        help="Directory that contains the RML test case folders.",
+    )
+    parser.add_argument(
+        "--mapper-jar",
+        "--burp-jar",
+        dest="rmlmapper_jar",
+        default="rmlmapper.jar",
+        help="Path to the mapper jar used to materialize the generated mapping.",
+    )
+    parser.add_argument(
+        "--case",
+        action="append",
+        default=[],
+        help="Run only matching case directory names. Can be passed multiple times.",
+    )
+    parser.add_argument(
+        "--base-uri",
+        default="http://example.com/base/",
+        help="Base URI passed to remap and BURP.",
+    )
+    parser.add_argument(
+        "--keep-artifacts",
+        action="store_true",
+        help="Keep generated_mapping.ttl and materialized_output.nq in each case directory.",
+    )
+    parser.add_argument(
+        "--compare-mode",
+        choices=("mapper", "output"),
+        default="mapper",
+        help="Compare against the official mapping materialized by the same mapper, or against output.nq directly.",
+    )
+    return parser.parse_args()
 
-total_cnt = len(folders)
 
-for folder in folders:
-    if "CSV" not in folder:
-        continue
-    print(f"Working on {folder}...")
-    all_files = os.listdir(f'{directory}{folder}')
-    
-    # Get csv and rdf file
-    csv_files = []
-    rdf_file = ""
-    for file in all_files:
-        if ".csv" in file:
-            csv_files.append(file)
-        elif ".nq" in file:
-            rdf_file = file
+def main() -> int:
+    args = parse_args()
+    cases_dir = Path(args.cases_dir)
+    rmlmapper_jar = Path(args.rmlmapper_jar)
 
-    csv_file_strs = [f'{directory}{folder}/{csv_file}' for csv_file in csv_files]
+    if not cases_dir.exists():
+        print(f"Cases directory not found: {cases_dir}", file=sys.stderr)
+        return 1
+    if not rmlmapper_jar.exists():
+        print(f"Mapper jar not found: {rmlmapper_jar}", file=sys.stderr)
+        return 1
 
-    # Clear output
-    with open("res.nq", "w") as file:
-        pass
+    case_dirs = sorted(path for path in cases_dir.iterdir() if path.is_dir())
+    if args.case:
+        selected = set(args.case)
+        case_dirs = [path for path in case_dirs if path.name in selected]
+
+    if not case_dirs:
+        print("No matching test cases found.", file=sys.stderr)
+        return 1
+
+    passed = 0
+    for case_dir in case_dirs:
+        try:
+            if run_case(
+                case_dir,
+                rmlmapper_jar,
+                args.keep_artifacts,
+                args.base_uri,
+                args.compare_mode,
+            ):
+                passed += 1
+        except BaseException as exc:
+            print(f"ERROR {case_dir.name}: {exc}")
+
+    total = len(case_dirs)
+    print(f"\nSummary: {passed}/{total} passed")
+    return 0 if passed == total else 1
 
 
-    rdf_file_refernce = f'{directory}{folder}/output.nq'
-    command = ['python3', 'remap.py', '--csv'] + csv_file_strs + ["--rdf", f'{directory}{folder}/{rdf_file}']
-    run_console_program(command)
-
-    print("===")
-    # Execute generate mapping file
-    command = ["java", "-jar", "burp.jar", "-m", "generated_mapping.ttl", "-o", "res.nq", "-b", "http://example.com/base/"]
-    run_console_program(command)
-
-    # Compare outputs 
-    res = compare_files("./res.nq", f'{directory}{folder}/output.nq')
-    if res == True:
-        passed_cnt += 1
-        print("Passed.")
-        print("=============")
-        
-print("=============")
-print(f"{passed_cnt} of {total_cnt} passed successful!")
+if __name__ == "__main__":
+    raise SystemExit(main())

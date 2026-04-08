@@ -1,5 +1,6 @@
 env
 __pycache__
+.venv
 *.csv
 mapping.ttl
 *.nq
@@ -8,3 +9,4 @@ remap.build
 remap.dist
 remap.bin
 remap.egg-info
+/test_cases/

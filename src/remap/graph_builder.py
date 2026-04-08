@@ -22,7 +22,9 @@ def init_template(g: Graph) -> str:
     return tm_name
 
 # Add logical source triples
-def add_logical_source(g: Graph, tm_name: str, path: str, is_json_data: bool) -> None:
+def add_logical_source(
+    g: Graph, tm_name: str, path: str, is_json_data: bool, iterator: str = "$"
+) -> None:
     # Generate blank nodes
     bn1 = BNode()
     bn2 = BNode()
@@ -34,7 +36,7 @@ def add_logical_source(g: Graph, tm_name: str, path: str, is_json_data: bool) ->
         g.add((bn1, REF_FORMULATION, CSV_FORMAT)) # CSV
     else:
         g.add((bn1, REF_FORMULATION, JSON_FORMAT)) # JSON
-        g.add((bn1, ITERATOR, Literal("$")))
+        g.add((bn1, ITERATOR, Literal(iterator)))
 
     g.add((bn1, SOURCE, bn2))
     g.add((bn2, RDF_TYPE, PATH_SOURCE_CLASS))
@@ -95,6 +97,7 @@ def add_subject(g: Graph, tm_name: str, term_map: str, term_map_type: str, term_
         
 # Add a POM
 def add_predicate_object_map(g: Graph, tm_name: str,\
+                            is_json_data: bool,\
                             p_term_map: str, p_term_map_type: str, p_term_type: str,\
                             o_term_map: str, o_term_map_type: str, o_term_type: str, \
                             data_type_term_type: str, data_type_term_map: str, data_type_term_map_type: str,\
@@ -132,7 +135,9 @@ def add_predicate_object_map(g: Graph, tm_name: str,\
         print("Error: Object term_map_type unsupported! Found", o_term_map_type)
         sys.exit(1)
     
-    if o_term_map_type != "constant":
+    if o_term_map_type != "constant" and not (
+        is_json_data and o_term_map_type == "reference" and o_term_type == "literal"
+    ):
         if o_term_type == "iri":
             g.add((bn3, TERM_TYPE, IRI))
         elif o_term_type == "blanknode":
@@ -144,7 +149,9 @@ def add_predicate_object_map(g: Graph, tm_name: str,\
             sys.exit(1)
 
     # Add datatype map 
-    if data_type_term_type != "":
+    if data_type_term_type != "" and not (
+        is_json_data and o_term_map_type == "reference" and o_term_type == "literal"
+    ):
         bn4 = BNode()
         g.add((bn3, DATATYPE_MAP, bn4))
         if data_type_term_map_type == "reference":
@@ -194,7 +201,7 @@ def add_predicate_object_map_join(g: Graph, tm_name: str,\
     # Add parent tm
     g.add((bn3, PARENT_TM, URIRef(tm2)))
 
-def build_sub_graph(file_path_csv: str, is_json_data: bool, s_term_map: str, s_term_map_type: str, s_term_type: str,\
+def build_sub_graph(file_path_csv: str, is_json_data: bool, json_iterator: str, s_term_map: str, s_term_map_type: str, s_term_type: str,\
                     p_term_map: str, p_term_map_type: str, p_term_type: str,\
                     o_term_map: str, o_term_map_type: str, o_term_type: str,\
                     g_term_type: str, g_term_map: str, g_term_map_type: str,\
@@ -206,9 +213,9 @@ def build_sub_graph(file_path_csv: str, is_json_data: bool, s_term_map: str, s_t
     rml_sub_graph.bind("rml", RML)
     
     tm = init_template(rml_sub_graph)
-    add_logical_source(rml_sub_graph, tm, file_path_csv, is_json_data)
+    add_logical_source(rml_sub_graph, tm, file_path_csv, is_json_data, json_iterator)
     add_subject(rml_sub_graph, tm, s_term_map, s_term_map_type, s_term_type, g_term_type, g_term_map, g_term_map_type)
-    add_predicate_object_map(rml_sub_graph, tm, p_term_map, p_term_map_type, p_term_type,\
+    add_predicate_object_map(rml_sub_graph, tm, is_json_data, p_term_map, p_term_map_type, p_term_type,\
                             o_term_map, o_term_map_type, o_term_type,\
                             data_type_term_type, data_type_term_map, data_type_term_map_type,\
                             lang_tag_term_type, lang_tag_term_map, lang_tag_term_map_type)
