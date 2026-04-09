@@ -564,22 +564,48 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
     return generated_triples
 
 # Filter data
+def mapping_generality_score(graph: Graph) -> tuple[int, int, int, int]:
+    rank = {"constant": 0, "template": 1, "reference": 2, "join": 3}
+    if is_join_graph(graph):
+        _, subject_type = getSubject(graph)
+        _, predicate_type = getPredicate(graph)
+        _, graph_type = getGraph(graph)
+        return (
+            rank.get(subject_type, -1),
+            rank.get(predicate_type, -1),
+            rank["join"],
+            rank.get(graph_type or "constant", -1),
+        )
+
+    info = extract_information(graph)
+    return (
+        rank.get(info[2], -1),
+        rank.get(info[4], -1),
+        rank.get(info[6], -1),
+        rank.get(info[8], -1),
+    )
+
+
 def filter_mappings(possible_triples: list[set[str]], rml_sub_graphs: list[Graph]) -> list[Graph]:
     # Pair each set of triples with the corresponding graph
     sets_and_graphs = [(s, g) for s, g in zip(possible_triples, rml_sub_graphs)]
 
     #
     # STEP 1: Remove duplicate
-    seen_frozensets = {}         # Map frozenset to first index where it appears
+    seen_frozensets = {}         # Map frozenset to best index where it appears
     duplicate_indices = set()    # Indices of sets that are duplicates
     for i, (triples_i, graph_i) in enumerate(sets_and_graphs):
         as_frozenset = frozenset(triples_i)
         if as_frozenset not in seen_frozensets:
-            # First time so store its index
             seen_frozensets[as_frozenset] = i
         else:
-            # mark index to remove
-            duplicate_indices.add(i)
+            previous_index = seen_frozensets[as_frozenset]
+            previous_graph = sets_and_graphs[previous_index][1]
+            if mapping_generality_score(graph_i) > mapping_generality_score(previous_graph):
+                duplicate_indices.add(previous_index)
+                seen_frozensets[as_frozenset] = i
+            else:
+                duplicate_indices.add(i)
 
     # reduced list without duplicates
     reduced_sets_and_graphs = [
@@ -629,7 +655,7 @@ def normalize_literal_term_map(term_map: str, term_map_type: str, term_type: str
 
 
 def normalize_json_template_placeholders(term_map: str) -> str:
-    return re.sub(r"\{\$\['([^']+)'\]\}", r"{\1}", term_map)
+    return term_map
 
 ##########################################################################################
 
@@ -1168,7 +1194,12 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                 continue
 
             # If we arrive here, generate the mapping
-            new_join_graph = build_sub_graph_join(g, g2)
+            new_join_graph = build_sub_graph_join(
+                g,
+                g2,
+                stored_data[info_g[0]],
+                stored_data[info_g2[0]],
+            )
             join_graphs.append(new_join_graph)
             graphs_to_remove.append(g)
             graphs_to_remove.append(g2)

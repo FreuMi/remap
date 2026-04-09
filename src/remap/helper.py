@@ -6,6 +6,44 @@ def getPath(graph: Graph) -> str:
         if str(p) == "http://w3id.org/rml/path":
             return str(o)   
 
+
+def getLogicalSourceDetails(graph: Graph) -> tuple[str, bool, str]:
+    logical_source = None
+    path = ""
+    is_json_data = False
+    iterator = "$"
+
+    for s, p, o in graph:
+        if str(p) == "http://w3id.org/rml/logicalSource":
+            logical_source = str(o)
+            break
+
+    if logical_source is None:
+        print("Error in getLogicalSourceDetails")
+        sys.exit(1)
+
+    source_node = None
+    for s, p, o in graph:
+        if str(s) != logical_source:
+            continue
+        if str(p) == "http://w3id.org/rml/referenceFormulation":
+            is_json_data = str(o) == "http://w3id.org/rml/JSONPath"
+        elif str(p) == "http://w3id.org/rml/iterator":
+            iterator = str(o)
+        elif str(p) == "http://w3id.org/rml/source":
+            source_node = str(o)
+
+    if source_node is None:
+        print("Error in getLogicalSourceDetails")
+        sys.exit(1)
+
+    for s, p, o in graph:
+        if str(s) == source_node and str(p) == "http://w3id.org/rml/path":
+            path = str(o)
+            break
+
+    return path, is_json_data, iterator
+
 def getSubject(graph: Graph) -> tuple[str,str]:
     subjectMap = ""
     for s,p,o in graph:
@@ -144,6 +182,24 @@ def clone_subtree(src_graph: Graph, root, dst_graph: Graph, memo=None):
     return root
 
 
+def clone_triples_map(src_graph: Graph, tm, dst_graph: Graph):
+    dst_graph.add((tm, RDF.type, RML.TriplesMap))
+
+    logical_source = src_graph.value(tm, RML.logicalSource)
+    if logical_source is not None:
+        new_logical_source = clone_subtree(src_graph, logical_source, dst_graph)
+        dst_graph.add((tm, RML.logicalSource, new_logical_source))
+
+    subject_map = src_graph.value(tm, RML.subjectMap)
+    if subject_map is not None:
+        new_subject_map = clone_subtree(src_graph, subject_map, dst_graph)
+        dst_graph.add((tm, RML.subjectMap, new_subject_map))
+
+    for pom in src_graph.objects(tm, RML.predicateObjectMap):
+        new_pom = clone_subtree(src_graph, pom, dst_graph)
+        dst_graph.add((tm, RML.predicateObjectMap, new_pom))
+
+
 def merge_triples_maps(graphs):
     """
     graphs: list of rdflib.Graph, each containing one rml:TriplesMap subgraph
@@ -166,6 +222,7 @@ def merge_triples_maps(graphs):
         grouped[key].append((g, tm))
 
     merged_graphs = []
+    replacements = {}
 
     for _, items in grouped.items():
         base_g, base_tm = items[0]
@@ -176,10 +233,27 @@ def merge_triples_maps(graphs):
             merged.add(triple)
 
         for g, tm in items[1:]:
+            replacements[tm] = base_tm
             for pom in g.objects(tm, RML.predicateObjectMap):
                 new_pom = clone_subtree(g, pom, merged)
                 merged.add((base_tm, RML.predicateObjectMap, new_pom))
+            for other_tm in g.subjects(RDF.type, RML.TriplesMap):
+                if other_tm == tm or (other_tm, RDF.type, RML.TriplesMap) in merged:
+                    continue
+                clone_triples_map(g, other_tm, merged)
 
         merged_graphs.append(merged)
+
+    if replacements:
+        parent_triples_map = URIRef("http://w3id.org/rml/parentTriplesMap")
+        for merged in merged_graphs:
+            updates = []
+            for s, p, o in merged.triples((None, parent_triples_map, None)):
+                replacement = replacements.get(o)
+                if replacement is not None and replacement != o:
+                    updates.append((s, o, replacement))
+            for s, old_o, new_o in updates:
+                merged.remove((s, parent_triples_map, old_o))
+                merged.add((s, parent_triples_map, new_o))
 
     return merged_graphs

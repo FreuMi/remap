@@ -270,7 +270,7 @@ def get_term_type_of_graph(g: Graph, node_type: str):
         sys.exit(1)
 
 
-def build_sub_graph_join(g: Graph, g2: Graph) -> Graph:
+def build_sub_graph_join(g: Graph, g2: Graph, data=None, data2=None) -> Graph:
     # Generate second part first
     rml_sub_graph2 = Graph()
 
@@ -278,19 +278,19 @@ def build_sub_graph_join(g: Graph, g2: Graph) -> Graph:
     RML = Namespace("http://w3id.org/rml/")
     rml_sub_graph2.bind("rml", RML)
 
-    file_path_csv2 = getPath(g2)
+    file_path_csv2, is_json_data2, json_iterator2 = getLogicalSourceDetails(g2)
     o_term_map2, o_term_map_type2 = getObject(g2)
     o_term_type2 = get_term_type_of_graph(g2, "o")
 
     # Init, add subject, and source
     tm2 = init_template(rml_sub_graph2)
-    add_logical_source(rml_sub_graph2, tm2, file_path_csv2)
+    add_logical_source(rml_sub_graph2, tm2, file_path_csv2, is_json_data2, json_iterator2)
     add_subject(rml_sub_graph2, tm2, o_term_map2, o_term_map_type2, o_term_type2, "", "", "")
 
     # Generate first part
     rml_sub_graph = Graph()
 
-    file_path_csv = getPath(g)
+    file_path_csv, is_json_data, json_iterator = getLogicalSourceDetails(g)
 
     s_term_map, s_term_map_type = getSubject(g)
     s_term_type = get_term_type_of_graph(g, "s")
@@ -303,10 +303,10 @@ def build_sub_graph_join(g: Graph, g2: Graph) -> Graph:
     o_term_map, o_term_map_type = getObject(g)
 
     # Get child and parents 
-    child, parent = identify_join(file_path_csv, file_path_csv2)
+    child, parent = identify_join(data if data is not None else file_path_csv, data2 if data2 is not None else file_path_csv2)
 
     tm = init_template(rml_sub_graph)
-    add_logical_source(rml_sub_graph, tm, file_path_csv)
+    add_logical_source(rml_sub_graph, tm, file_path_csv, is_json_data, json_iterator)
     add_subject(rml_sub_graph, tm, s_term_map, s_term_map_type, s_term_type, g_term_type, g_term_map, g_term_map_type)
     add_predicate_object_map_join(rml_sub_graph, tm, p_term_map, p_term_map_type, tm2, parent, child )
 
