@@ -50,7 +50,7 @@ def getSubject(graph: Graph) -> tuple[str,str]:
         if str(p) == "http://w3id.org/rml/subjectMap":
             subjectMap = str(o)
             break
-    cnt = 0
+    has_blanknode_termtype = False
     for s,p,o in graph:
         if str(s) == subjectMap:
             if str(p) == "http://w3id.org/rml/constant":
@@ -59,11 +59,11 @@ def getSubject(graph: Graph) -> tuple[str,str]:
                 return str(o), "reference"
             elif str(p) == "http://w3id.org/rml/template":
                 return str(o), "template"
-            else:
-                cnt += 1
+            elif str(p) == "http://w3id.org/rml/termType" and str(o) == "http://w3id.org/rml/BlankNode":
+                has_blanknode_termtype = True
         
-    if cnt == 1:
-        pass
+    if has_blanknode_termtype:
+        return "", "none"
     print("Error in getSubject")
     sys.exit(1)
             

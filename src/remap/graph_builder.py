@@ -49,8 +49,10 @@ def add_subject(g: Graph, tm_name: str, term_map: str, term_map_type: str, term_
 
     g.add((URIRef(tm_name), SUBJECT_MAP, bn1))
 
-     # If constant & blanknode
-    if term_map_type == "constant" and term_type == "blanknode":
+     # A blank node subject without a usable expression map should stay expressionless.
+    if term_type == "blanknode" and term_map_type == "none":
+        g.add((bn1, TERM_TYPE, BLANKNODE))
+    elif term_type == "blanknode" and term_map_type == "constant":
         g.add((bn1, TERM_TYPE, BLANKNODE))
         g.add((bn1, CONSTANT, URIRef(term_map)))
     else:

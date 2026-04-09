@@ -323,7 +323,9 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 g = ""
 
                 # Subject
-                if info[2] == "constant":
+                if info[2] == "none":
+                    s = "BLANK_NODE"
+                elif info[2] == "constant":
                     s = info[1]
                 elif info[2] == "reference":
                     key = info[1]
@@ -448,7 +450,9 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             g = ""
 
             # Subject
-            if info[2] == "constant":
+            if info[2] == "none":
+                s = "BLANK_NODE"
+            elif info[2] == "constant":
                 s = info[1]
             elif info[2] == "reference":
                 key = info[1]
@@ -565,7 +569,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
 
 # Filter data
 def mapping_generality_score(graph: Graph) -> tuple[int, int, int, int]:
-    rank = {"constant": 0, "template": 1, "reference": 2, "join": 3}
+    rank = {"constant": 0, "none": 1, "template": 2, "reference": 3, "join": 4}
     if is_join_graph(graph):
         _, subject_type = getSubject(graph)
         _, predicate_type = getPredicate(graph)
@@ -656,6 +660,33 @@ def normalize_literal_term_map(term_map: str, term_map_type: str, term_type: str
 
 def normalize_json_template_placeholders(term_map: str) -> str:
     return term_map
+
+
+def collapse_expressionless_blanknode_subjects(graphs: list[Graph]) -> None:
+    graphs_by_source = {}
+    RML = Namespace("http://w3id.org/rml/")
+
+    for graph in graphs:
+        if is_join_graph(graph):
+            continue
+        info = extract_information(graph)
+        graphs_by_source.setdefault(info[0], []).append((graph, info))
+
+    for source_graphs in graphs_by_source.values():
+        has_non_constant_blanknode = any(
+            info[2] in {"template", "reference", "none"}
+            and any((sm, RML.termType, RML.BlankNode) in graph for sm in graph.objects(None, RML.subjectMap))
+            for graph, info in source_graphs
+        )
+        if has_non_constant_blanknode:
+            continue
+
+        for graph, info in source_graphs:
+            if info[2] != "constant":
+                continue
+            for sm in list(graph.objects(None, RML.subjectMap)):
+                if (sm, RML.termType, RML.BlankNode) in graph:
+                    graph.remove((sm, RML.constant, None))
 
 ##########################################################################################
 
@@ -1209,18 +1240,39 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
         rml_sub_graphs = remove_graph(g, rml_sub_graphs)
     
     ### Filter combined result of all input files
+    actual_triples = set()
+    actual_triples_blank_subject = set()
+    for rdf in rdf_data:
+        s = clean_entry(rdf.s)
+        p = clean_entry(rdf.p)
+        o = clean_entry(rdf.o)
+        g = clean_entry(rdf.g)
+
+        if base_uri in s:
+            s = s.replace(base_uri, "")
+        if base_uri in p:
+            p = p.replace(base_uri, "")
+        if base_uri in o:
+            o = o.replace(base_uri, "")
+
+        actual_triples.add(f"{s}|{p}|{o}|{g}")
+        if isBlanknode(rdf.s):
+            s = "BLANK_NODE"
+        actual_triples_blank_subject.add(f"{s}|{p}|{o}|{g}")
+
     # Prepare data
     possible_triples = []
     new_graphs = []
     for g in rml_sub_graphs:
         info = extract_information(g)
         data = stored_data[info[0]]
-        res = generate_expected_triple(data, info)
-        add = True
-        for element in res:
-            if "None" in element:
-                add = False
-        if add == False:
+        actual_target = actual_triples_blank_subject if info[2] == "none" else actual_triples
+        res = {
+            element
+            for element in generate_expected_triple(data, info)
+            if "None" not in element and element in actual_target
+        }
+        if not res:
             continue
         possible_triples.append(res)
         new_graphs.append(g)
@@ -1231,7 +1283,13 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
         info = extract_information_join(g1,g2)
         data = stored_data[info[0]]
         data2 = stored_data[info[9]]
-        res = generate_expected_triple(data, info, data2)
+        res = {
+            element
+            for element in generate_expected_triple(data, info, data2)
+            if "None" not in element and element in actual_triples
+        }
+        if not res:
+            continue
         # Add to original data
         g = g1 + g2
         rml_sub_graphs.append(g)
@@ -1241,6 +1299,8 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
     filtered_graphs = filter_mappings(possible_triples, rml_sub_graphs)
     rml_sub_graphs = filtered_graphs
 
+    collapse_expressionless_blanknode_subjects(rml_sub_graphs)
+
     # Check if all triples are expected
     filtered_graphs = []    
 
@@ -1248,7 +1308,9 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
         if not is_join_graph(sub_g):
             info = extract_information(sub_g)
             data = stored_data[info[0]]
-            res = generate_expected_triple(data, info)
+            res = {
+                element for element in generate_expected_triple(data, info) if "None" not in element
+            }
         else:
             # Identify graphs pairs
             g1 = None
@@ -1266,7 +1328,11 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
             info = extract_information_join(g1,g2)
             data = stored_data[info[0]]
             data2 = stored_data[info[9]]
-            res = generate_expected_triple(data, info, data2)
+            res = {
+                element
+                for element in generate_expected_triple(data, info, data2)
+                if "None" not in element
+            }
 
         cnt_found = 0
 
@@ -1284,6 +1350,8 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                     p = p.replace(base_uri, "")
                 if base_uri in o:
                     o = o.replace(base_uri, "")
+                if not is_join_graph(sub_g) and info[2] == "none" and isBlanknode(rdf.s):
+                    s = "BLANK_NODE"
 
                 comp = f"{s}|{p}|{o}|{g}"
                 if comp == entry:
