@@ -66,11 +66,11 @@ def tokenizer(input_val: str) -> list[str]:
 
 def parse_rdf_as_nt(raw_data: str):
     ## Parse RDF
-    supported_formats = ["json-ld", "turtle", "xml", "nt", "n3"]
+    supported_formats = ["nquads", "trig", "json-ld", "turtle", "xml", "nt", "n3"]
     parsed_successfully = False
     for format in supported_formats:
         try:
-            temp_graph = rdflib.Graph()
+            temp_graph = rdflib.Dataset()
             temp_graph.parse(data=raw_data, format=format)
 
             # If parsing succeeds without an exception
@@ -85,7 +85,7 @@ def parse_rdf_as_nt(raw_data: str):
     if not parsed_successfully:
         raise TypeError(f"Input data could not be parsed in any supported RDF format: {supported_formats}")
 
-    ntriple_data = rdf_graph.serialize(format="nt")
+    ntriple_data = rdf_graph.serialize(format="nquads")
 
     return ntriple_data
 

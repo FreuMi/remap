@@ -627,6 +627,10 @@ def normalize_literal_term_map(term_map: str, term_map_type: str, term_type: str
 
     return match.group(1), "reference"
 
+
+def normalize_json_template_placeholders(term_map: str) -> str:
+    return re.sub(r"\{\$\['([^']+)'\]\}", r"{\1}", term_map)
+
 ##########################################################################################
 
 def is_valid_json(s: str) -> bool:
@@ -641,7 +645,7 @@ def flatten_dict(d, parent_key="", sep="."):
         d = json.loads(d)
     items = {}
     for k, v in d.items():
-        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        new_key = append_json_path_segment(parent_key, k)
         if isinstance(v, Mapping):
             items.update(flatten_dict(v, new_key, sep=sep))
         elif isinstance(v, list):
@@ -650,6 +654,21 @@ def flatten_dict(d, parent_key="", sep="."):
             items[new_key] = v
 
     return items
+
+
+def is_simple_json_key(key: str) -> bool:
+    return re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) is not None
+
+
+def append_json_path_segment(parent_key: str, key: str) -> str:
+    escaped_key = key.replace("\\", "\\\\").replace("'", "\\'")
+    if parent_key == "":
+        if is_simple_json_key(key):
+            return key
+        return f"['{escaped_key}']"
+    if is_simple_json_key(key):
+        return f"{parent_key}.{key}"
+    return f"{parent_key}['{escaped_key}']"
 
 
 def extract_json_records(raw_json_text: str) -> tuple[list[dict], str]:
@@ -684,7 +703,7 @@ def json_to_dataframe(raw_json_text: str) -> tuple[pd.DataFrame, str]:
             flat_record = {"value": record}
         flattened_records.append(
             {
-                f"$.{key}": "None" if value is None else str(value)
+                f"${key if key.startswith('[') else '.' + key}": "None" if value is None else str(value)
                 for key, value in flat_record.items()
             }
         )
@@ -701,18 +720,27 @@ def build_empty_mapping(
     json_iterator: str,
     base_uri: str,
 ) -> str:
+    if is_json_data:
+        subject_map = "$.missing_subject"
+        predicate_map = "$.missing_predicate"
+        object_map = "$.missing_object"
+    else:
+        subject_map = "missing_subject"
+        predicate_map = "missing_predicate"
+        object_map = "missing_object"
+
     empty_graph = build_sub_graph(
         source_path,
         is_json_data,
         json_iterator,
-        f"{base_uri}empty-subject",
-        "constant",
+        subject_map,
+        "reference",
         "iri",
-        f"{base_uri}empty-predicate",
-        "constant",
+        predicate_map,
+        "reference",
         "iri",
-        "empty-object",
-        "constant",
+        object_map,
+        "reference",
         "literal",
         "",
         "",
@@ -848,6 +876,8 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                 s_term_map = s_term_map.replace("ab____", "\\{")
                 s_term_map = s_term_map.replace("abb_____", "\\}")
                 s_term_map = s_term_map.replace("abbb______", "\\")
+                if is_json_data and s_term_map_type == "template":
+                    s_term_map = normalize_json_template_placeholders(s_term_map)
 
                 ## Handle predicate ##
                 p_term_type = get_term_type(p)
@@ -874,6 +904,8 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                 p_term_map = p_term_map.replace("ab____", "{")
                 p_term_map = p_term_map.replace("abb_____", "}")
                 p_term_map = p_term_map.replace("abbb______", "\\")
+                if is_json_data and p_term_map_type == "template":
+                    p_term_map = normalize_json_template_placeholders(p_term_map)
 
                 ## Handle object ##
                 o_term_type = get_term_type(o)
@@ -900,6 +932,8 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                 o_term_map = o_term_map.replace("ab____", "\\\\{")
                 o_term_map = o_term_map.replace("abb_____", "\\\\}")
                 o_term_map = o_term_map.replace("abbb______", "\\")
+                if is_json_data and o_term_map_type == "template":
+                    o_term_map = normalize_json_template_placeholders(o_term_map)
                 o_term_map, o_term_map_type = normalize_literal_term_map(
                     o_term_map, o_term_map_type, o_term_type
                 )
@@ -934,6 +968,8 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                 g_term_map = g_term_map.replace("ab____", "{")
                 g_term_map = g_term_map.replace("abb_____", "}")
                 g_term_map = g_term_map.replace("abbb______", "\\")
+                if is_json_data and g_term_map_type == "template":
+                    g_term_map = normalize_json_template_placeholders(g_term_map)
 
                 ## Handle datatype ##
                 raw_o_value = element.o
@@ -968,6 +1004,8 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                     data_type_term_map = data_type_term_map.replace("ab____", "{")
                     data_type_term_map = data_type_term_map.replace("abb_____", "}")
                     data_type_term_map = data_type_term_map.replace("abbb______", "\\")
+                    if is_json_data and data_type_term_map_type == "template":
+                        data_type_term_map = normalize_json_template_placeholders(data_type_term_map)
 
                 ## Hanlde Language Tag ##
                 raw_o_value = element.o
@@ -1000,6 +1038,8 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                     lang_tag_term_map = lang_tag_term_map.replace("ab____", "{")
                     lang_tag_term_map = lang_tag_term_map.replace("abb_____", "}")
                     lang_tag_term_map = lang_tag_term_map.replace("abbb______", "\\")
+                    if is_json_data and lang_tag_term_map_type == "template":
+                        lang_tag_term_map = normalize_json_template_placeholders(lang_tag_term_map)
 
                 ## Build rml graph ##
                 tmp_rml_sub_graph = build_sub_graph(csv_path, is_json_data, json_iterator, s_term_map, s_term_map_type, s_term_type,\
