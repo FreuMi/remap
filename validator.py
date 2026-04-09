@@ -131,6 +131,7 @@ def materialize_mapping(mapping_file: Path, output_file: Path, base_uri: str) ->
             str(output_file.resolve()),
             "-b",
             base_uri,
+            "--validate-shacl"
         ],
         check=True,
         text=True,

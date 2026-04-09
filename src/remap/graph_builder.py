@@ -115,9 +115,9 @@ def add_predicate_object_map(g: Graph, tm_name: str,\
     if p_term_map_type == "constant":
         g.add((bn2, CONSTANT, URIRef(p_term_map)))
     elif p_term_map_type == "reference":
-        g.add((bn2, REFERENCE, URIRef(p_term_map)))
+        g.add((bn2, REFERENCE, Literal(p_term_map)))
     elif p_term_map_type == "template":
-        g.add((bn2, TEMPLATE, URIRef(p_term_map)))
+        g.add((bn2, TEMPLATE, Literal(p_term_map)))
     else:
         print("Error: Prediacte term_map_type unsupported! Found", p_term_map_type)
         sys.exit(1)
@@ -179,9 +179,9 @@ def add_predicate_object_map_join(g: Graph, tm_name: str,\
     if p_term_map_type == "constant":
         g.add((bn2, CONSTANT, URIRef(p_term_map)))
     elif p_term_map_type == "reference":
-        g.add((bn2, REFERENCE, URIRef(p_term_map)))
+        g.add((bn2, REFERENCE, Literal(p_term_map)))
     elif p_term_map_type == "template":
-        g.add((bn2, TEMPLATE, URIRef(p_term_map)))
+        g.add((bn2, TEMPLATE, Literal(p_term_map)))
     else:
         print("Error: Prediacte term_map_type unsupported! Found", p_term_map_type)
         sys.exit(1)
