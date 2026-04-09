@@ -1254,6 +1254,8 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
             p = p.replace(base_uri, "")
         if base_uri in o:
             o = o.replace(base_uri, "")
+        if base_uri in g:
+            g = g.replace(base_uri, "")
 
         actual_triples.add(f"{s}|{p}|{o}|{g}")
         if isBlanknode(rdf.s):
@@ -1350,6 +1352,8 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                     p = p.replace(base_uri, "")
                 if base_uri in o:
                     o = o.replace(base_uri, "")
+                if base_uri in g:
+                    g = g.replace(base_uri, "")
                 if not is_join_graph(sub_g) and info[2] == "none" and isBlanknode(rdf.s):
                     s = "BLANK_NODE"
 
