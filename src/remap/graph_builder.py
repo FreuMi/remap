@@ -137,9 +137,7 @@ def add_predicate_object_map(g: Graph, tm_name: str,\
         print("Error: Object term_map_type unsupported! Found", o_term_map_type)
         sys.exit(1)
     
-    if o_term_map_type != "constant" and not (
-        is_json_data and o_term_map_type == "reference" and o_term_type == "literal"
-    ):
+    if o_term_map_type != "constant":
         if o_term_type == "iri":
             g.add((bn3, TERM_TYPE, IRI))
         elif o_term_type == "blanknode":

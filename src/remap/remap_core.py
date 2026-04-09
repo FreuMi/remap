@@ -14,6 +14,7 @@ import json
 import io
 import csv
 from collections.abc import Mapping
+from itertools import product
 
 DEBUG = False
 
@@ -78,19 +79,21 @@ def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: s
     if is_protected:
         rdf_term = rest_iri
 
-    if not isIn(csv_data, rdf_term):
+    org_csv_data = csv_data
+    normalized_csv_data = csv_data
+    if is_valid_uri(org_csv_data):
+        normalized_csv_data = remove_base_uri(org_csv_data, base_uri)
+
+    if not isIn(normalized_csv_data, rdf_term):
         rdf_term_map_type = "constant"
     else:
-        org_csv_data = csv_data
-        csv_data = csv_data.replace(rdf_term, "")
+        csv_data = normalized_csv_data.replace(rdf_term, "")
         if csv_data != "":
             rdf_term_map_type = "template"
         elif is_valid_uri(org_csv_data):
             rdf_term_map_type = "reference"
-            csv_data = org_csv_data
         elif is_valid_uri(base_uri + org_csv_data):
-            rdf_term_map_type = "template"
-            csv_data = org_csv_data
+            rdf_term_map_type = "reference"
         elif csv_data == "":
             rdf_term_map_type = "reference"
         else:
@@ -163,6 +166,47 @@ def remove_base_uri(entry: str, base_uri: str) -> str:
         if base_uri in entry:
             entry = entry.replace(base_uri, "")
     return entry
+
+
+def rdf_term_variants(raw_term: str, cleaned_term: str, base_uri: str) -> list[str]:
+    variants = [cleaned_term]
+    if raw_term != "" and isURI(raw_term) and base_uri in cleaned_term:
+        stripped = cleaned_term.replace(base_uri, "")
+        if stripped not in variants:
+            variants.append(stripped)
+    return variants
+
+
+def build_actual_triple_variants(rdf, base_uri: str, blank_subject: bool = False) -> set[str]:
+    s = clean_entry(rdf.s)
+    p = clean_entry(rdf.p)
+    o = clean_entry(rdf.o)
+    g = clean_entry(rdf.g)
+
+    subject_variants = rdf_term_variants(rdf.s, s, base_uri)
+    if blank_subject and isBlanknode(rdf.s):
+        subject_variants = ["BLANK_NODE"]
+
+    predicate_variants = rdf_term_variants(rdf.p, p, base_uri)
+    object_variants = rdf_term_variants(rdf.o, o, base_uri)
+    graph_variants = rdf_term_variants(rdf.g, g, base_uri) if rdf.g != "" else [g]
+
+    return {
+        f"{subject}|{predicate}|{obj}|{graph}"
+        for subject, predicate, obj, graph in product(
+            subject_variants,
+            predicate_variants,
+            object_variants,
+            graph_variants,
+        )
+    }
+
+
+def build_canonical_actual_triple(rdf) -> str:
+    return (
+        f"{clean_entry(rdf.s)}|{clean_entry(rdf.p)}|"
+        f"{clean_entry(rdf.o)}|{clean_entry(rdf.g)}"
+    )
 
 # Check if entry is an URI
 def isURI(value: str) -> bool:
@@ -1242,25 +1286,19 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
     ### Filter combined result of all input files
     actual_triples = set()
     actual_triples_blank_subject = set()
+    actual_triple_records = []
     for rdf in rdf_data:
-        s = clean_entry(rdf.s)
-        p = clean_entry(rdf.p)
-        o = clean_entry(rdf.o)
-        g = clean_entry(rdf.g)
-
-        if base_uri in s:
-            s = s.replace(base_uri, "")
-        if base_uri in p:
-            p = p.replace(base_uri, "")
-        if base_uri in o:
-            o = o.replace(base_uri, "")
-        if base_uri in g:
-            g = g.replace(base_uri, "")
-
-        actual_triples.add(f"{s}|{p}|{o}|{g}")
-        if isBlanknode(rdf.s):
-            s = "BLANK_NODE"
-        actual_triples_blank_subject.add(f"{s}|{p}|{o}|{g}")
+        variants = build_actual_triple_variants(rdf, base_uri)
+        blank_variants = build_actual_triple_variants(rdf, base_uri, blank_subject=True)
+        actual_triples.update(variants)
+        actual_triples_blank_subject.update(blank_variants)
+        actual_triple_records.append(
+            (
+                build_canonical_actual_triple(rdf),
+                variants,
+                blank_variants,
+            )
+        )
 
     # Prepare data
     possible_triples = []
@@ -1269,10 +1307,16 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
         info = extract_information(g)
         data = stored_data[info[0]]
         actual_target = actual_triples_blank_subject if info[2] == "none" else actual_triples
-        res = {
+        generated_entries = {
             element
             for element in generate_expected_triple(data, info)
             if "None" not in element and element in actual_target
+        }
+        variant_index = 2 if info[2] == "none" else 1
+        res = {
+            canonical
+            for canonical, variants, blank_variants in actual_triple_records
+            if generated_entries & (blank_variants if variant_index == 2 else variants)
         }
         if not res:
             continue
@@ -1285,10 +1329,15 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
         info = extract_information_join(g1,g2)
         data = stored_data[info[0]]
         data2 = stored_data[info[9]]
-        res = {
+        generated_entries = {
             element
             for element in generate_expected_triple(data, info, data2)
             if "None" not in element and element in actual_triples
+        }
+        res = {
+            canonical
+            for canonical, variants, _ in actual_triple_records
+            if generated_entries & variants
         }
         if not res:
             continue
@@ -1339,27 +1388,13 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
         cnt_found = 0
 
         for entry in res:
-            for rdf in rdf_data:
-                s = clean_entry(rdf.s)
-                p = clean_entry(rdf.p)
-                o = clean_entry(rdf.o)
-                g = clean_entry(rdf.g)
-
-                # Handle base uri
-                if base_uri in s:
-                    s = s.replace(base_uri, "")
-                if base_uri in p:
-                    p = p.replace(base_uri, "")
-                if base_uri in o:
-                    o = o.replace(base_uri, "")
-                if base_uri in g:
-                    g = g.replace(base_uri, "")
-                if not is_join_graph(sub_g) and info[2] == "none" and isBlanknode(rdf.s):
-                    s = "BLANK_NODE"
-
-                comp = f"{s}|{p}|{o}|{g}"
-                if comp == entry:
-                    cnt_found+=1
+            target_triples = (
+                actual_triples_blank_subject
+                if not is_join_graph(sub_g) and info[2] == "none"
+                else actual_triples
+            )
+            if entry in target_triples:
+                cnt_found += 1
 
         if len(res) == cnt_found:
             filtered_graphs.append(sub_g)
