@@ -71,6 +71,30 @@ def tokenizer(input_val: str) -> list[str]:
     
     return result
 
+
+def strip_line_terminator(line: str) -> str:
+    in_quotation = False
+    in_iri = False
+    escaped = False
+
+    for index, char in enumerate(line):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\" and in_quotation:
+            escaped = True
+            continue
+        if char == "<" and not in_quotation:
+            in_iri = True
+        elif char == ">" and in_iri:
+            in_iri = False
+        elif char == "\"":
+            in_quotation = not in_quotation
+
+    if not in_quotation and not in_iri and line.endswith("."):
+        return line[:-1].rstrip()
+    return line
+
 def parse_rdf_as_nt(raw_data: str):
     raw_data = "\n".join(
         line for line in raw_data.splitlines() if not line.lstrip().startswith("#")
@@ -125,14 +149,15 @@ def parse(ntriple_data: str) -> list[Quad]:
         line = line.strip()
         if line == "":
             continue
+        line = strip_line_terminator(line)
 
         line_parts = tokenizer(line)      
 
-        # Hanlde without graph
-        if len(line_parts) == 4:
+        # Handle triples without graph
+        if len(line_parts) == 3:
             x = Quad(line_parts[0], line_parts[1], line_parts[2], "")
             rdf_data.append(x)
-        elif len(line_parts) == 5:
+        elif len(line_parts) == 4:
             x = Quad(line_parts[0], line_parts[1], line_parts[2], line_parts[3])
             rdf_data.append(x)
         else:

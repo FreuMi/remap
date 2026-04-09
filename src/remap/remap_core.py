@@ -31,7 +31,12 @@ def encode_uris(graph):
     return updated_graph
 
 def check_protected_iris(iri: str) -> tuple[bool, str, str]:
-    protected_iris = ["http://www.w3.org/2000/01/rdf-schema#", "http://w3id.org/rml/", "http://www.w3.org/2001/XMLSchema#" ]
+    protected_iris = [
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+        "http://www.w3.org/2000/01/rdf-schema#",
+        "http://w3id.org/rml/",
+        "http://www.w3.org/2001/XMLSchema#",
+    ]
     	
     for protected_iri in protected_iris:
         if protected_iri in iri:
