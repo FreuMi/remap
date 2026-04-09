@@ -523,6 +523,16 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 language = ""
                 if language_type == "constant":
                     language = language_map
+                elif language_type == "reference":
+                    key = sanitize_lookup_key(language_map)
+                    language = row[key]
+                elif language_type == "template":
+                    matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', language_map)
+                    language = language_map
+                    for match in matches:
+                        match_org = match
+                        match = sanitize_lookup_key(match)
+                        language = language.replace("{"+match_org+"}", row[match])
 
                 # Handle graph
                 if info[8] == "constant":
@@ -640,6 +650,16 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             language = ""
             if language_type == "constant":
                 language = language_map
+            elif language_type == "reference":
+                key = sanitize_lookup_key(language_map)
+                language = row[key]
+            elif language_type == "template":
+                matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', language_map)
+                language = language_map
+                for match in matches:
+                    match_org = match
+                    match = sanitize_lookup_key(match)
+                    language = language.replace("{"+match_org+"}", row[match])
 
             if info[8] == "constant":
                 g = info[7]

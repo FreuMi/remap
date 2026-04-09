@@ -128,6 +128,7 @@ def getDatatype(graph: Graph) -> tuple[str, str]:
 
 def getLanguage(graph: Graph) -> tuple[str, str]:
     objectMap = ""
+    languageMap = ""
     for s, p, o in graph:
         if str(p) == "http://w3id.org/rml/objectMap":
             objectMap = str(o)
@@ -135,6 +136,19 @@ def getLanguage(graph: Graph) -> tuple[str, str]:
     for s, p, o in graph:
         if str(s) == objectMap and str(p) == "http://w3id.org/rml/language":
             return str(o), "constant"
+        if str(s) == objectMap and str(p) == "http://w3id.org/rml/languageMap":
+            languageMap = str(o)
+    if languageMap == "":
+        return "", ""
+    for s, p, o in graph:
+        if str(s) != languageMap:
+            continue
+        if str(p) == "http://w3id.org/rml/constant":
+            return str(o), "constant"
+        elif str(p) == "http://w3id.org/rml/reference":
+            return str(o), "reference"
+        elif str(p) == "http://w3id.org/rml/template":
+            return str(o), "template"
     return "", ""
 
 def getGraph(graph: Graph) -> tuple[str,str]:

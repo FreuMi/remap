@@ -31,6 +31,7 @@ CHILD = URIRef("http://w3id.org/rml/child")
 PARENT = URIRef("http://w3id.org/rml/parent")
 PARENT_TM = URIRef("http://w3id.org/rml/parentTriplesMap")
 LANG_TAG_SHORT = URIRef("http://w3id.org/rml/language")
+LANGUAGE_MAP = URIRef("http://w3id.org/rml/languageMap")
 
 
 IRI = URIRef("http://w3id.org/rml/URI")

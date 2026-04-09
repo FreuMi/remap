@@ -165,6 +165,13 @@ def add_predicate_object_map(g: Graph, tm_name: str,\
     elif lang_tag_term_type != "":
         if lang_tag_term_map_type == "constant":
             g.add((bn3, LANG_TAG_SHORT, Literal(lang_tag_term_map)))
+        elif lang_tag_term_map_type in {"reference", "template"}:
+            bn4 = BNode()
+            g.add((bn3, LANGUAGE_MAP, bn4))
+            if lang_tag_term_map_type == "reference":
+                g.add((bn4, REFERENCE, Literal(lang_tag_term_map)))
+            else:
+                g.add((bn4, TEMPLATE, Literal(lang_tag_term_map)))
         else:
             print("Error handling language tag term map type!. Got: ", lang_tag_term_map_type)
 
