@@ -1,6 +1,7 @@
 import subprocess
 import sys
 from pathlib import Path
+from datetime import datetime
 
 from rdflib import Dataset
 from rdflib.compare import graph_diff, to_isomorphic
@@ -20,6 +21,7 @@ DEFAULT_BASE_URI = "http://example.com/"
 
 GENERATED_MAPPING = "generated_mapping.ttl"
 MATERIALIZED_OUTPUT = "materialized_output.nq"
+VALIDATION_REPORT = REPO_ROOT / "validation_report.md"
 
 IGNORED_CASE_FILES = {
     "README.md",
@@ -159,7 +161,53 @@ def cleanup(case_dir: Path) -> None:
     (case_dir / MATERIALIZED_OUTPUT).unlink(missing_ok=True)
 
 
-def run_case(case_dir: Path) -> bool:
+def write_markdown_report(results: list[dict], output_path: Path) -> None:
+    passed = sum(1 for result in results if result["passed"])
+    failed = len(results) - passed
+    timestamp = datetime.now().isoformat(timespec="seconds")
+
+    lines = [
+        "# Validation Report",
+        "",
+        f"- Generated: `{timestamp}`",
+        f"- Summary: `{passed}/{len(results)} passed, {failed} failed`",
+        "",
+        "## Results",
+        "",
+        "| Case | Status | Details |",
+        "| --- | --- | --- |",
+    ]
+
+    for result in results:
+        details = result["details"].replace("\n", "<br>")
+        lines.append(
+            f"| `{result['case']}` | {'PASSED' if result['passed'] else 'FAILED'} | {details or '-'} |"
+        )
+
+        if result["only_generated"]:
+            lines.extend(
+                [
+                    "",
+                    f"### {result['case']} Only In Generated Output",
+                    "",
+                ]
+            )
+            lines.extend(f"- `{line}`" for line in result["only_generated"])
+
+        if result["only_expected"]:
+            lines.extend(
+                [
+                    "",
+                    f"### {result['case']} Only In Expected Output",
+                    "",
+                ]
+            )
+            lines.extend(f"- `{line}`" for line in result["only_expected"])
+
+    output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def run_case(case_dir: Path) -> dict:
     rdf_file = case_dir / "output.nq"
     generated_mapping = case_dir / GENERATED_MAPPING
     materialized_output = case_dir / MATERIALIZED_OUTPUT
@@ -188,14 +236,32 @@ def run_case(case_dir: Path) -> bool:
         cleanup(case_dir)
         if expected_error:
             print(f"PASSED {case_dir.name} (expected failure: {exc})")
-            return True
+            return {
+                "case": case_dir.name,
+                "passed": True,
+                "details": f"Expected failure: {exc}",
+                "only_generated": [],
+                "only_expected": [],
+            }
         print(f"ERROR {case_dir.name}: {exc}")
-        return False
+        return {
+            "case": case_dir.name,
+            "passed": False,
+            "details": f"Error: {exc}",
+            "only_generated": [],
+            "only_expected": [],
+        }
 
     if expected_error:
         cleanup(case_dir)
         print(f"FAILED {case_dir.name} (expected failure, but succeeded)")
-        return False
+        return {
+            "case": case_dir.name,
+            "passed": False,
+            "details": "Expected failure, but succeeded",
+            "only_generated": [],
+            "only_expected": [],
+        }
 
     try:
         is_equal, only_generated, only_expected = compare_graphs(
@@ -205,13 +271,25 @@ def run_case(case_dir: Path) -> bool:
     except Exception as exc:
         cleanup(case_dir)
         print(f"ERROR {case_dir.name}: {exc}")
-        return False
+        return {
+            "case": case_dir.name,
+            "passed": False,
+            "details": f"Error: {exc}",
+            "only_generated": [],
+            "only_expected": [],
+        }
     finally:
         cleanup(case_dir)
 
     if is_equal:
         print(f"PASSED {case_dir.name}")
-        return True
+        return {
+            "case": case_dir.name,
+            "passed": True,
+            "details": "",
+            "only_generated": [],
+            "only_expected": [],
+        }
 
     print(f"FAILED {case_dir.name}")
     if only_generated:
@@ -222,7 +300,13 @@ def run_case(case_dir: Path) -> bool:
         print("  Only in expected output:")
         for line in sorted(only_expected):
             print(f"    {line}")
-    return False
+    return {
+        "case": case_dir.name,
+        "passed": False,
+        "details": "Output mismatch",
+        "only_generated": sorted(only_generated),
+        "only_expected": sorted(only_expected),
+    }
 
 
 def main() -> int:
@@ -238,16 +322,18 @@ def main() -> int:
         print("No test cases found.", file=sys.stderr)
         return 1
 
-    passed = 0
-    failed = 0
+    results: list[dict] = []
 
     for case_dir in case_dirs:
-        if run_case(case_dir):
-            passed += 1
-        else:
-            failed += 1
+        results.append(run_case(case_dir))
+
+    write_markdown_report(results, VALIDATION_REPORT)
+
+    passed = sum(1 for result in results if result["passed"])
+    failed = len(results) - passed
 
     print(f"\nSummary: {passed}/{len(case_dirs)} passed, {failed} failed")
+    print(f"Markdown report: {VALIDATION_REPORT}")
     return 0 if failed == 0 else 1
 
 

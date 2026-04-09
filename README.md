@@ -107,6 +107,18 @@ Then compile:
 nuitka --standalone --onefile --include-package=remap -m remap.remap_cli
 ```
 
+## Conformance
+
+ReMap passes all official RML-Core JSON test cases from `kg-construct/rml-core`.
+
+Place the official test cases in `test_cases/` and run the validation with:
+
+```bash
+PYTHONPATH=src python3 validator.py
+```
+
+The validator also generates a Markdown report at `validation_report.md`.
+
 ## Citation
 
 If you use this work, please cite:
