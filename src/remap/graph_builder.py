@@ -71,6 +71,8 @@ def add_subject(g: Graph, tm_name: str, term_map: str, term_map_type: str, term_
         if term_map_type != "constant":
             if term_type == "iri":
                 g.add((bn1, TERM_TYPE, IRI))
+            elif term_type == "unsafeiri":
+                g.add((bn1, TERM_TYPE, UNSAFE_IRI))
             elif term_type == "blanknode":
                 g.add((bn1, TERM_TYPE, BLANKNODE))
             elif term_type == "literal":
@@ -140,6 +142,8 @@ def add_predicate_object_map(g: Graph, tm_name: str,\
     if o_term_map_type != "constant":
         if o_term_type == "iri":
             g.add((bn3, TERM_TYPE, IRI))
+        elif o_term_type == "unsafeiri":
+            g.add((bn3, TERM_TYPE, UNSAFE_IRI))
         elif o_term_type == "blanknode":
             g.add((bn3, TERM_TYPE, BLANKNODE))
         elif o_term_type == "literal":
@@ -256,9 +260,23 @@ def get_term_type_of_graph(g: Graph, node_type: str):
         if str(p) == "http://w3id.org/rml/termType" and str(s) == node:
             term_type = str(o)
             break
+
+    if term_type == "":
+        for s, p, o in g:
+            if str(s) != node or str(p) != "http://w3id.org/rml/constant":
+                continue
+            value = str(o)
+            if value.startswith("http://") or value.startswith("https://"):
+                return "iri"
+            return "literal"
         
-    if term_type == "http://w3id.org/rml/IRI":
+    if term_type in {
+        "http://w3id.org/rml/IRI",
+        "http://w3id.org/rml/URI",
+    }:
         return "iri"
+    elif term_type == "http://w3id.org/rml/UnsafeIRI":
+        return "unsafeiri"
     elif term_type == "http://w3id.org/rml/BlankNode":
         return "blanknode"
     elif term_type == "http://w3id.org/rml/Literal":

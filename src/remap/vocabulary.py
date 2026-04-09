@@ -33,6 +33,7 @@ PARENT_TM = URIRef("http://w3id.org/rml/parentTriplesMap")
 LANG_TAG_SHORT = URIRef("http://w3id.org/rml/language")
 
 
-IRI = URIRef("http://w3id.org/rml/IRI")
+IRI = URIRef("http://w3id.org/rml/URI")
+UNSAFE_IRI = URIRef("http://w3id.org/rml/UnsafeIRI")
 BLANKNODE = URIRef("http://w3id.org/rml/BlankNode")
 LITERAL = URIRef("http://w3id.org/rml/Literal")

@@ -9,4 +9,4 @@ remap.build
 remap.dist
 remap.bin
 remap.egg-info
-/test_cases/
+RMLTC*

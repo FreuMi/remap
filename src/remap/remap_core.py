@@ -8,7 +8,7 @@ from .vocabulary import *
 import logging
 from .helper import *
 
-from .graph_builder import build_sub_graph_join, build_sub_graph
+from .graph_builder import build_sub_graph_join, build_sub_graph, get_term_type_of_graph
 from .utils import parse, parse_rdf_as_nt
 import json
 import io
@@ -45,6 +45,9 @@ def is_valid_uri(uri):
         return all([result.scheme, result.netloc])
     except ValueError:
         return False
+
+def is_unsafe_iri_value(uri: str) -> bool:
+    return quote(uri, safe=":/#%[]@!$&'()*+,;=-._~") != uri
 
 def remove_graph(reference_g: Graph, graphs: list[Graph]) -> list[Graph]:
     new_graphs = []
@@ -135,7 +138,8 @@ def get_term_type(data: str) -> str:
 
     res = ""
     if isURI(data):
-        res = "iri"
+        cleaned = clean_entry(data)
+        res = "unsafeiri" if is_unsafe_iri_value(cleaned) else "iri"
     elif isLiteral(data):
         res = "literal"
     elif isBlanknode(data):
@@ -341,10 +345,18 @@ def extract_information_join(graph1: Graph, graph2: Graph) -> tuple[str,str,str,
 
 def isDuplicateGraph(graph: Graph, all_graphs: list[Graph]) -> bool:
     reference_info = extract_information(graph)
+    reference_term_types = (
+        get_term_type_of_graph(graph, "s"),
+        get_term_type_of_graph(graph, "o"),
+    )
     for stored_graph in all_graphs:
         # Check if source, subject, predicate, and object are the same.
         stored_information = extract_information(stored_graph)
-        if reference_info == stored_information:
+        stored_term_types = (
+            get_term_type_of_graph(stored_graph, "s"),
+            get_term_type_of_graph(stored_graph, "o"),
+        )
+        if reference_info == stored_information and reference_term_types == stored_term_types:
             return True
 
     return False
@@ -654,6 +666,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
 # Filter data
 def mapping_generality_score(graph: Graph) -> tuple[int, int, int, int]:
     rank = {"constant": 0, "none": 1, "template": 2, "reference": 3, "join": 4}
+    term_type_rank = {"literal": 0, "iri": 1, "unsafeiri": 2, "blanknode": 3}
     if is_join_graph(graph):
         _, subject_type = getSubject(graph)
         _, predicate_type = getPredicate(graph)
@@ -663,14 +676,20 @@ def mapping_generality_score(graph: Graph) -> tuple[int, int, int, int]:
             rank.get(predicate_type, -1),
             rank["join"],
             rank.get(graph_type or "constant", -1),
+            0,
+            0,
         )
 
     info = extract_information(graph)
+    subject_term_type = get_term_type_of_graph(graph, "s")
+    object_term_type = get_term_type_of_graph(graph, "o")
     return (
         rank.get(info[2], -1),
         rank.get(info[4], -1),
         rank.get(info[6], -1),
         rank.get(info[8], -1),
+        term_type_rank.get(subject_term_type, -1),
+        term_type_rank.get(object_term_type, -1),
     )
 
 

@@ -38,15 +38,22 @@ def decode_safe_iri(safe_iri: str) -> str:
 def tokenizer(input_val: str) -> list[str]:
     result = []
     in_quotation = False
+    in_iri = False
     word = ""
     
     for char in input_val:
-        if char == "\"":
+        if char == "<" and not in_quotation:
+            in_iri = True
+            word += char
+        elif char == ">" and in_iri:
+            in_iri = False
+            word += char
+        elif char == "\"":
             # Toggle the in_quotation flag
             in_quotation = not in_quotation
             word += char 
         elif char == " ":
-            if in_quotation:
+            if in_quotation or in_iri:
                 # Inside quotes, spaces are part of the word
                 word += char
             else:
@@ -68,6 +75,14 @@ def parse_rdf_as_nt(raw_data: str):
     raw_data = "\n".join(
         line for line in raw_data.splitlines() if not line.lstrip().startswith("#")
     )
+
+    line_based = [
+        line.strip()
+        for line in raw_data.splitlines()
+        if line.strip()
+    ]
+    if all(len(tokenizer(line)) in {4, 5} for line in line_based):
+        return raw_data
 
     # Preserve original blank node labels when the input is already line-based RDF.
     for format in ["nquads", "nt"]:

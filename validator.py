@@ -47,6 +47,14 @@ def parse_rdf_dataset(path: Path) -> Dataset:
     return dataset
 
 
+def normalize_rdf_lines(path: Path) -> set[str]:
+    return {
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+
+
 def serialize_graph_lines(graph) -> set[str]:
     data = graph.serialize(format="nt")
     if isinstance(data, bytes):
@@ -59,8 +67,15 @@ def serialize_graph_lines(graph) -> set[str]:
 
 
 def compare_graphs(file1: Path, file2: Path) -> tuple[bool, set[str], set[str]]:
-    dataset1 = parse_rdf_dataset(file1)
-    dataset2 = parse_rdf_dataset(file2)
+    try:
+        dataset1 = parse_rdf_dataset(file1)
+        dataset2 = parse_rdf_dataset(file2)
+    except Exception:
+        lines1 = normalize_rdf_lines(file1)
+        lines2 = normalize_rdf_lines(file2)
+        only_generated = lines1 - lines2
+        only_expected = lines2 - lines1
+        return not only_generated and not only_expected, only_generated, only_expected
 
     graphs1 = {str(graph.identifier): graph for graph in dataset1.graphs()}
     graphs2 = {str(graph.identifier): graph for graph in dataset2.graphs()}
