@@ -3,7 +3,7 @@ from io import StringIO
 from rdflib import Graph, Namespace, URIRef
 import sys
 import re
-from urllib.parse import urlparse, quote
+from urllib.parse import urlparse, quote, unquote
 from .vocabulary import *
 import logging
 from .helper import *
@@ -84,17 +84,25 @@ def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: s
     if is_valid_uri(org_csv_data):
         normalized_csv_data = remove_base_uri(org_csv_data, base_uri)
 
-    if not isIn(normalized_csv_data, rdf_term):
+    comparison_csv_data = normalized_csv_data
+    encoded_csv_data = quote(org_csv_data, safe="")
+    if encoded_csv_data != org_csv_data and isIn(encoded_csv_data, rdf_term):
+        comparison_csv_data = encoded_csv_data
+
+    if not isIn(comparison_csv_data, rdf_term):
         rdf_term_map_type = "constant"
     else:
-        csv_data = normalized_csv_data.replace(rdf_term, "")
-        if csv_data != "":
+        matched_csv_data = comparison_csv_data
+        exact_match = rdf_term == matched_csv_data
+        if not exact_match:
+            rdf_term_map_type = "template"
+        elif comparison_csv_data == encoded_csv_data and encoded_csv_data != org_csv_data:
             rdf_term_map_type = "template"
         elif is_valid_uri(org_csv_data):
             rdf_term_map_type = "reference"
         elif is_valid_uri(base_uri + org_csv_data):
             rdf_term_map_type = "reference"
-        elif csv_data == "":
+        elif exact_match:
             rdf_term_map_type = "reference"
         else:
             print("Error detecting term_map_type! Found:", rdf_term_map_type)
@@ -106,7 +114,7 @@ def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: s
     if rdf_term_map_type == "constant":
         term_map = rdf_term
     elif rdf_term_map_type == "template":
-        term_map = rdf_term.replace(csv_data, "{"+csv_header+"}")
+        term_map = rdf_term.replace(matched_csv_data, "{"+csv_header+"}", 1)
     elif rdf_term_map_type == "reference":
         term_map = csv_header
     else:
@@ -174,6 +182,9 @@ def rdf_term_variants(raw_term: str, cleaned_term: str, base_uri: str) -> list[s
         stripped = cleaned_term.replace(base_uri, "")
         if stripped not in variants:
             variants.append(stripped)
+        decoded = unquote(stripped)
+        if decoded not in variants:
+            variants.append(decoded)
     return variants
 
 

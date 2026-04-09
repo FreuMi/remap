@@ -113,11 +113,6 @@ def parse(ntriple_data: str) -> list[Quad]:
 
         line_parts = tokenizer(line)      
 
-        # Decode iri safety
-        for i in range(len(line_parts)):
-            line_parts[i] = decode_safe_iri(line_parts[i])
-
-
         # Hanlde without graph
         if len(line_parts) == 4:
             x = Quad(line_parts[0], line_parts[1], line_parts[2], "")
