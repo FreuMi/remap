@@ -16,7 +16,7 @@ from remap import generate_rml
 
 CASES_DIR = REPO_ROOT / "test_cases"
 FLEXRML = REPO_ROOT / "flexrml"
-BASE_URI = "http://example.com/base/"
+DEFAULT_BASE_URI = "http://example.com/"
 
 GENERATED_MAPPING = "generated_mapping.ttl"
 MATERIALIZED_OUTPUT = "materialized_output.nq"
@@ -98,6 +98,19 @@ def is_error_expected(case_dir: Path) -> bool:
     return "**Error expected?** Yes" in readme_file.read_text(encoding="utf-8")
 
 
+def get_base_uri(case_dir: Path) -> str:
+    readme_file = case_dir / "README.md"
+    if not readme_file.exists():
+        return DEFAULT_BASE_URI
+
+    for line in readme_file.read_text(encoding="utf-8").splitlines():
+        prefix = "**Default Base IRI**: "
+        if line.startswith(prefix):
+            return line[len(prefix):].strip()
+
+    return DEFAULT_BASE_URI
+
+
 def find_input_files(case_dir: Path) -> list[Path]:
     return sorted(
         path
@@ -108,7 +121,7 @@ def find_input_files(case_dir: Path) -> list[Path]:
     )
 
 
-def materialize_mapping(mapping_file: Path, output_file: Path) -> None:
+def materialize_mapping(mapping_file: Path, output_file: Path, base_uri: str) -> None:
     subprocess.run(
         [
             str(FLEXRML.resolve()),
@@ -117,7 +130,7 @@ def materialize_mapping(mapping_file: Path, output_file: Path) -> None:
             "-o",
             str(output_file.resolve()),
             "-b",
-            BASE_URI,
+            base_uri,
         ],
         check=True,
         text=True,
@@ -135,6 +148,7 @@ def run_case(case_dir: Path) -> bool:
     generated_mapping = case_dir / GENERATED_MAPPING
     materialized_output = case_dir / MATERIALIZED_OUTPUT
     expected_error = is_error_expected(case_dir)
+    base_uri = get_base_uri(case_dir)
 
     cleanup(case_dir)
 
@@ -149,11 +163,11 @@ def run_case(case_dir: Path) -> bool:
         mapping_ttl = generate_rml(
             rdf_data,
             input_data,
-            base_uri=BASE_URI,
+            base_uri=base_uri,
             csv_paths=[path.name for path in input_files],
         )
         generated_mapping.write_text(mapping_ttl, encoding="utf-8")
-        materialize_mapping(generated_mapping, materialized_output)
+        materialize_mapping(generated_mapping, materialized_output, base_uri)
     except Exception as exc:
         cleanup(case_dir)
         if expected_error:
