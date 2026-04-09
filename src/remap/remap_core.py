@@ -755,6 +755,15 @@ def get_invar(term_map, term_map_type):
         sys.exit(1)
 
 
+def term_map_invariants(term_map: str, term_map_type: str) -> set[str]:
+    invariants = {get_invar(term_map, term_map_type)}
+    if term_map_type == "constant":
+        decoded = unquote(term_map)
+        if decoded != term_map:
+            invariants.add(decoded)
+    return {value for value in invariants if value != ""}
+
+
 def normalize_literal_term_map(term_map: str, term_map_type: str, term_type: str) -> tuple[str, str]:
     if term_type != "literal" or term_map_type != "template":
         return term_map, term_map_type
@@ -1313,42 +1322,42 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
 
     for g in rml_sub_graphs:
         info_g = extract_information(g)
+        object_term_type_g = get_term_type_of_graph(g, "o")
         # Compare to all other files
         for g2 in rml_sub_graphs:
             info_g2 = extract_information(g2)
+            subject_term_type_g2 = get_term_type_of_graph(g2, "s")
             
             # Do not compare with itself
             if info_g2 == info_g:
                 continue
 
-            # tm1 must not be constant in subject
+            # child TM must have a generated subject
             if info_g[2] == "constant":
                 continue
 
-            # tm1 must be constant in object
-            if info_g[6] != "constant":
+            # child object must be an IRI-like value
+            if object_term_type_g not in {"iri", "unsafeiri"}:
                 continue
 
-            # tm2 must be constant in subject
-            if info_g2[2] != "constant":
+            # parent TM must have a generated subject
+            if info_g2[2] == "constant":
                 continue
 
-            # tm2 must not be constant in object
-            if info_g2[6] == "constant":
-                continue
-            
-            # predicate and prediacte term type must be the same
-            if not (info_g[3] == info_g2[3] and info_g[4] == info_g2[4]):
+            if subject_term_type_g2 not in {"iri", "unsafeiri"}:
                 continue
 
-            # invar of tm1 subject must be in tm2
-            invar_subject_tm1 = get_invar(info_g[1], info_g[2])
-            if invar_subject_tm1 not in info_g2[1]:
+            # The parent subject pattern must match the child object pattern.
+            child_object_invariants = term_map_invariants(info_g[5], info_g[6])
+            parent_subject_invariants = term_map_invariants(info_g2[1], info_g2[2])
+            if not child_object_invariants or not parent_subject_invariants:
                 continue
 
-            # invar of tm2 object must be in tm1
-            invar_object_tm2 = get_invar(info_g2[5], info_g2[6])
-            if invar_object_tm2 not in info_g[5]:
+            if not any(
+                child_inv in parent_inv or parent_inv in child_inv
+                for child_inv in child_object_invariants
+                for parent_inv in parent_subject_invariants
+            ):
                 continue
 
             # If we arrive here, generate the mapping
@@ -1358,9 +1367,10 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                 stored_data[info_g[0]],
                 stored_data[info_g2[0]],
             )
+            if len(new_join_graph[0]) == 0 or len(new_join_graph[1]) == 0:
+                continue
             join_graphs.append(new_join_graph)
             graphs_to_remove.append(g)
-            graphs_to_remove.append(g2)
             
     # Remove graphs that are used in join
     for g in graphs_to_remove:

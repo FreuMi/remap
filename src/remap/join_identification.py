@@ -123,6 +123,8 @@ def identify_join(dfA_source, dfB_source):
 
     ### Identify top candidate for joining ###
     best_score = results_df['score'].max()
+    if best_score <= 0:
+        return "", ""
     best_pairs = results_df[results_df['score'] == best_score]
 
     # Print all best pairs
@@ -144,5 +146,8 @@ def identify_join(dfA_source, dfB_source):
             max_child = child
             max_parent = parent
             max_val = len(df_joined)
+
+    if max_val <= 0:
+        return "", ""
 
     return max_child, max_parent

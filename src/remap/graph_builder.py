@@ -287,21 +287,25 @@ def get_term_type_of_graph(g: Graph, node_type: str):
 
 
 def build_sub_graph_join(g: Graph, g2: Graph, data=None, data2=None) -> Graph:
-    # Generate second part first
+    # Build a subject-only parent triples map for parentTriplesMap.
     rml_sub_graph2 = Graph()
-
-    # Set RML namespace
     RML = Namespace("http://w3id.org/rml/")
     rml_sub_graph2.bind("rml", RML)
-
     file_path_csv2, is_json_data2, json_iterator2 = getLogicalSourceDetails(g2)
-    o_term_map2, o_term_map_type2 = getObject(g2)
-    o_term_type2 = get_term_type_of_graph(g2, "o")
-
-    # Init, add subject, and source
+    parent_subject_map, parent_subject_map_type = getSubject(g2)
+    parent_subject_type = get_term_type_of_graph(g2, "s")
     tm2 = init_template(rml_sub_graph2)
     add_logical_source(rml_sub_graph2, tm2, file_path_csv2, is_json_data2, json_iterator2)
-    add_subject(rml_sub_graph2, tm2, o_term_map2, o_term_map_type2, o_term_type2, "", "", "")
+    add_subject(
+        rml_sub_graph2,
+        tm2,
+        parent_subject_map,
+        parent_subject_map_type,
+        parent_subject_type,
+        "",
+        "",
+        "",
+    )
 
     # Generate first part
     rml_sub_graph = Graph()
@@ -310,6 +314,7 @@ def build_sub_graph_join(g: Graph, g2: Graph, data=None, data2=None) -> Graph:
 
     s_term_map, s_term_map_type = getSubject(g)
     s_term_type = get_term_type_of_graph(g, "s")
+    parent_subject_map, _ = getSubject(g2)
 
     g_term_map, g_term_map_type = getGraph(g)
     g_term_type = "iri"
@@ -320,6 +325,11 @@ def build_sub_graph_join(g: Graph, g2: Graph, data=None, data2=None) -> Graph:
 
     # Get child and parents 
     child, parent = identify_join(data if data is not None else file_path_csv, data2 if data2 is not None else file_path_csv2)
+    if child == "" or parent == "":
+        return (Graph(), Graph())
+    same_source_self_join = file_path_csv == file_path_csv2 and child == parent
+    if not same_source_self_join and (child not in o_term_map or parent not in parent_subject_map):
+        return (Graph(), Graph())
 
     tm = init_template(rml_sub_graph)
     add_logical_source(rml_sub_graph, tm, file_path_csv, is_json_data, json_iterator)
