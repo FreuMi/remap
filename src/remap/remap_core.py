@@ -98,6 +98,8 @@ def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: s
             rdf_term_map_type = "template"
         elif comparison_csv_data == encoded_csv_data and encoded_csv_data != org_csv_data:
             rdf_term_map_type = "template"
+        elif is_protected and exact_match:
+            rdf_term_map_type = "template"
         elif is_valid_uri(org_csv_data):
             rdf_term_map_type = "reference"
         elif is_valid_uri(base_uri + org_csv_data):
