@@ -65,6 +65,19 @@ def tokenizer(input_val: str) -> list[str]:
     return result
 
 def parse_rdf_as_nt(raw_data: str):
+    raw_data = "\n".join(
+        line for line in raw_data.splitlines() if not line.lstrip().startswith("#")
+    )
+
+    # Preserve original blank node labels when the input is already line-based RDF.
+    for format in ["nquads", "nt"]:
+        try:
+            temp_graph = rdflib.Dataset()
+            temp_graph.parse(data=raw_data, format=format)
+            return raw_data
+        except Exception:
+            continue
+
     ## Parse RDF
     supported_formats = ["nquads", "trig", "json-ld", "turtle", "xml", "nt", "n3"]
     parsed_successfully = False
