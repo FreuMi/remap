@@ -372,6 +372,16 @@ def mask_string(input_data: str, row: dict[str, str]) -> str:
 
     return tmp_input_data
 
+
+def sanitize_lookup_key(key: str) -> str:
+    key = key.replace(r"\{", "{")
+    key = key.replace(r"\}", "}")
+    key = key.replace(" ", "a___")
+    key = key.replace("{", "ab____")
+    key = key.replace("}", "abb_____")
+    key = key.replace("\\", "abbb______")
+    return key
+
 # Generate expected triple
 def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.DataFrame()) -> set[str]:
     # Generate data
@@ -422,11 +432,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 elif info[2] == "constant":
                     s = info[1]
                 elif info[2] == "reference":
-                    key = info[1]
-                    key = key.replace(" ", "a___")
-                    key = key.replace("{", "ab____")
-                    key = key.replace("}", "abb_____")
-                    key = key.replace("\\", "abbb______")
+                    key = sanitize_lookup_key(info[1])
                     s = row[key]
                 elif info[2] == "template":
                     # Get template refernces
@@ -434,10 +440,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                     s = info[1]
                     for match in matches:
                         match_org = match
-                        match = match.replace(" ", "a___")
-                        match = match.replace("{", "ab____")
-                        match = match.replace("}", "abb_____")
-                        match = match.replace("\\", "abbb______")
+                        match = sanitize_lookup_key(match)
                         match = f"{info[0].replace('.','')}_{match}"
                         s = s.replace("{"+match_org+"}", row[match])
 
@@ -449,11 +452,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 if info[4] == "constant":
                     p = info[3]
                 elif info[4] == "reference":
-                    key = info[3]
-                    key = key.replace(" ", "a___")
-                    key = key.replace("{", "ab____")
-                    key = key.replace("}", "abb_____")
-                    key = key.replace("\\", "abbb______")
+                    key = sanitize_lookup_key(info[3])
                     p = row[key]
                 elif info[4] == "template":
                     # Get template refernces
@@ -461,10 +460,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                     p = info[3]
                     for match in matches:
                         match_org = match
-                        match = match.replace(" ", "a___")
-                        match = match.replace("{", "ab____")
-                        match = match.replace("}", "abb_____")
-                        match = match.replace("\\", "abbb______")
+                        match = sanitize_lookup_key(match)
                         p = p.replace("{"+match_org+"}", row[match])
                 
                 p = p.replace("a___", " ")
@@ -475,11 +471,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 if info[6] == "constant":
                     o = info[5]
                 elif info[6] == "reference":
-                    key = info[5]
-                    key = key.replace(" ", "a___")
-                    key = key.replace("{", "ab____")
-                    key = key.replace("}", "abb_____")
-                    key = key.replace("\\", "abbb______")
+                    key = sanitize_lookup_key(info[5])
                     o = row[key]
                 elif info[6] == "template":
                     # Get template refernces
@@ -487,10 +479,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                     o = info[5]
                     for match in matches:
                         match_org = match
-                        match = match.replace(" ", "a___")
-                        match = match.replace("{", "ab____")
-                        match = match.replace("}", "abb_____")
-                        match = match.replace("\\", "abbb______")
+                        match = sanitize_lookup_key(match)
                         match = f"{info[9].replace('.','')}_{match}"
                         o = o.replace("{"+match_org+"}", row[match])
 
@@ -504,14 +493,14 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 if data_type_type == "constant":
                     datatype = data_type_map
                 elif data_type_type == "reference":
-                    key = data_type_map.replace(" ", "a___").replace("{", "ab____").replace("}", "abb_____").replace("\\", "abbb______")
+                    key = sanitize_lookup_key(data_type_map)
                     datatype = row[key]
                 elif data_type_type == "template":
                     matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', data_type_map)
                     datatype = data_type_map
                     for match in matches:
                         match_org = match
-                        match = match.replace(" ", "a___").replace("{", "ab____").replace("}", "abb_____").replace("\\", "abbb______")
+                        match = sanitize_lookup_key(match)
                         datatype = datatype.replace("{"+match_org+"}", row[match])
 
                 language = ""
@@ -522,11 +511,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 if info[8] == "constant":
                     g = info[7]
                 elif info[8] == "reference":
-                    key = info[7]
-                    key = key.replace(" ", "a___")
-                    key = key.replace("{", "ab____")
-                    key = key.replace("}", "abb_____")
-                    key = key.replace("\\", "abbb______")
+                    key = sanitize_lookup_key(info[7])
                     g = row[key]
                 elif info[8] == "template":
                     # Get template refernces
@@ -534,10 +519,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                     g = info[7]
                     for match in matches:
                         match_org = match
-                        match = match.replace(" ", "a___")
-                        match = match.replace("{", "ab____")
-                        match = match.replace("}", "abb_____")
-                        match = match.replace("\\", "abbb______")
+                        match = sanitize_lookup_key(match)
                         g = g.replace("{"+match_org+"}", row[match])
 
                 g = g.replace("a___", " ")
@@ -567,11 +549,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             elif info[2] == "constant":
                 s = info[1]
             elif info[2] == "reference":
-                key = info[1]
-                key = key.replace(" ", "a___")
-                key = key.replace("{", "ab____")
-                key = key.replace("}", "abb_____")
-                key = key.replace("\\", "abbb______")
+                key = sanitize_lookup_key(info[1])
                 s = row[key]
             elif info[2] == "template":
                 # Get template refernces
@@ -579,10 +557,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 s = info[1]
                 for match in matches:
                     match_org = match
-                    match = match.replace(" ", "a___")
-                    match = match.replace("{", "ab____")
-                    match = match.replace("}", "abb_____")
-                    match = match.replace("\\", "abbb______")
+                    match = sanitize_lookup_key(match)
 
                     s = s.replace("{"+match_org+"}", row[match])
 
@@ -594,11 +569,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             if info[4] == "constant":
                 p = info[3]
             elif info[4] == "reference":
-                key = info[3]
-                key = key.replace(" ", "a___")
-                key = key.replace("{", "ab____")
-                key = key.replace("}", "abb_____")
-                key = key.replace("\\", "abbb______")
+                key = sanitize_lookup_key(info[3])
                 p = row[key]
             elif info[4] == "template":
                 # Get template refernces
@@ -606,10 +577,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 p = info[3]
                 for match in matches:
                     match_org = match
-                    match = match.replace(" ", "a___")
-                    match = match.replace("{", "ab____")
-                    match = match.replace("}", "abb_____")
-                    match = match.replace("\\", "abbb______")
+                    match = sanitize_lookup_key(match)
                     p = p.replace("{"+match_org+"}", row[match])
             
             p = p.replace("a___", " ")
@@ -620,11 +588,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             if info[6] == "constant":
                 o = info[5]
             elif info[6] == "reference":
-                key = info[5]
-                key = key.replace(" ", "a___")
-                key = key.replace("{", "ab____")
-                key = key.replace("}", "abb_____")
-                key = key.replace("\\", "abbb______")
+                key = sanitize_lookup_key(info[5])
                 o = row[key]
             elif info[6] == "template":
                 # Get template refernces
@@ -632,10 +596,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 o = info[5]
                 for match in matches:
                     match_org = match
-                    match = match.replace(" ", "a___")
-                    match = match.replace("{", "ab____")
-                    match = match.replace("}", "abb_____")
-                    match = match.replace("\\", "abbb______")
+                    match = sanitize_lookup_key(match)
                     o = o.replace("{"+match_org+"}", row[match])
 
             o = o.replace("a___", " ")
@@ -649,14 +610,14 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             if data_type_type == "constant":
                 datatype = data_type_map
             elif data_type_type == "reference":
-                key = data_type_map.replace(" ", "a___").replace("{", "ab____").replace("}", "abb_____").replace("\\", "abbb______")
+                key = sanitize_lookup_key(data_type_map)
                 datatype = row[key]
             elif data_type_type == "template":
                 matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', data_type_map)
                 datatype = data_type_map
                 for match in matches:
                     match_org = match
-                    match = match.replace(" ", "a___").replace("{", "ab____").replace("}", "abb_____").replace("\\", "abbb______")
+                    match = sanitize_lookup_key(match)
                     datatype = datatype.replace("{"+match_org+"}", row[match])
 
             language = ""
@@ -666,11 +627,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             if info[8] == "constant":
                 g = info[7]
             elif info[8] == "reference":
-                key = info[7]
-                key = key.replace(" ", "a___")
-                key = key.replace("{", "ab____")
-                key = key.replace("}", "abb_____")
-                key = key.replace("\\", "abbb______")
+                key = sanitize_lookup_key(info[7])
                 g = row[key]
             elif info[8] == "template":
                 # Get template refernces
@@ -678,10 +635,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 g = info[7]
                 for match in matches:
                     match_org = match
-                    match = match.replace(" ", "a___")
-                    match = match.replace("{", "ab____")
-                    match = match.replace("}", "abb_____")
-                    match = match.replace("\\", "abbb______")
+                    match = sanitize_lookup_key(match)
                     g = g.replace("{"+match_org+"}", row[match])
 
             g = g.replace("a___", " ")
@@ -790,6 +744,21 @@ def normalize_literal_term_map(term_map: str, term_map_type: str, term_type: str
 
 def normalize_json_template_placeholders(term_map: str) -> str:
     return term_map
+
+
+def normalize_escaped_json_iri_reference(
+    term_map: str,
+    term_map_type: str,
+    term_type: str,
+    base_uri: str,
+) -> tuple[str, str]:
+    if term_map_type != "reference" or term_type != "iri":
+        return term_map, term_map_type
+    if "\\" not in term_map:
+        return term_map, term_map_type
+    if base_uri == "":
+        return term_map, term_map_type
+    return f"{base_uri}{{{term_map}}}", "template"
 
 
 def collapse_expressionless_blanknode_subjects(graphs: list[Graph]) -> None:
@@ -1065,6 +1034,10 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                 s_term_map = s_term_map.replace("abbb______", "\\")
                 if is_json_data and s_term_map_type == "template":
                     s_term_map = normalize_json_template_placeholders(s_term_map)
+                if is_json_data:
+                    s_term_map, s_term_map_type = normalize_escaped_json_iri_reference(
+                        s_term_map, s_term_map_type, s_term_type, base_uri
+                    )
 
                 ## Handle predicate ##
                 p_term_type = get_term_type(p)
@@ -1515,6 +1488,8 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
     # Adjust ////
     str_result_graph = str_result_graph.replace("\\\\","\\")
     str_result_graph = str_result_graph.replace("\\\\\\\\","\\\\")
+    str_result_graph = str_result_graph.replace("$['\\{", "$['\\\\{")
+    str_result_graph = str_result_graph.replace("\\}']", "\\\\}']")
 
     # If only base uri is there, an error occured
     if str_result_graph.strip() == f"@base <{base_uri}> .":
