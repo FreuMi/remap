@@ -149,9 +149,7 @@ def add_predicate_object_map(g: Graph, tm_name: str,\
             sys.exit(1)
 
     # Add datatype map 
-    if data_type_term_type != "" and not (
-        is_json_data and o_term_map_type == "reference" and o_term_type == "literal"
-    ):
+    if data_type_term_type != "":
         bn4 = BNode()
         g.add((bn3, DATATYPE_MAP, bn4))
         if data_type_term_map_type == "reference":
