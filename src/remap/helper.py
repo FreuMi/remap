@@ -103,6 +103,40 @@ def getObject(graph: Graph) -> tuple[str,str]:
     print("Error in getObject")
     sys.exit(1)
 
+def getDatatype(graph: Graph) -> tuple[str, str]:
+    objectMap = ""
+    datatypeMap = ""
+    for s, p, o in graph:
+        if str(p) == "http://w3id.org/rml/objectMap":
+            objectMap = str(o)
+            break
+    for s, p, o in graph:
+        if str(s) == objectMap and str(p) == "http://w3id.org/rml/datatypeMap":
+            datatypeMap = str(o)
+            break
+    if datatypeMap == "":
+        return "", ""
+    for s, p, o in graph:
+        if str(s) == datatypeMap:
+            if str(p) == "http://w3id.org/rml/constant":
+                return str(o), "constant"
+            elif str(p) == "http://w3id.org/rml/reference":
+                return str(o), "reference"
+            elif str(p) == "http://w3id.org/rml/template":
+                return str(o), "template"
+    return "", ""
+
+def getLanguage(graph: Graph) -> tuple[str, str]:
+    objectMap = ""
+    for s, p, o in graph:
+        if str(p) == "http://w3id.org/rml/objectMap":
+            objectMap = str(o)
+            break
+    for s, p, o in graph:
+        if str(s) == objectMap and str(p) == "http://w3id.org/rml/language":
+            return str(o), "constant"
+    return "", ""
+
 def getGraph(graph: Graph) -> tuple[str,str]:
     graphMap = ""
     for s,p,o in graph:

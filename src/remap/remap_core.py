@@ -72,6 +72,7 @@ def isIn(sub, s):
 # Itentify term_map_type of (constant, reference, template) and generate term_map
 def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: str) -> tuple[str, str]:
     rdf_term_map_type = ""
+    full_rdf_term = rdf_term
 
     # Check for protected iri
     is_protected, rest_iri, protected_prefix = check_protected_iris(rdf_term)
@@ -84,21 +85,22 @@ def get_term_map_type(rdf_term: str, csv_header: str, csv_data: str, base_uri: s
     if is_valid_uri(org_csv_data):
         normalized_csv_data = remove_base_uri(org_csv_data, base_uri)
 
+    full_iri_match = is_protected and org_csv_data == full_rdf_term
     comparison_csv_data = normalized_csv_data
     encoded_csv_data = quote(org_csv_data, safe="")
     if encoded_csv_data != org_csv_data and isIn(encoded_csv_data, rdf_term):
         comparison_csv_data = encoded_csv_data
 
-    if not isIn(comparison_csv_data, rdf_term):
+    if not full_iri_match and not isIn(comparison_csv_data, rdf_term):
         rdf_term_map_type = "constant"
     else:
-        matched_csv_data = comparison_csv_data
-        exact_match = rdf_term == matched_csv_data
+        matched_csv_data = org_csv_data if full_iri_match else comparison_csv_data
+        exact_match = full_iri_match or rdf_term == matched_csv_data
         if not exact_match:
             rdf_term_map_type = "template"
         elif comparison_csv_data == encoded_csv_data and encoded_csv_data != org_csv_data:
             rdf_term_map_type = "template"
-        elif is_protected and exact_match:
+        elif is_protected and exact_match and not full_iri_match:
             rdf_term_map_type = "template"
         elif is_valid_uri(org_csv_data):
             rdf_term_map_type = "reference"
@@ -195,6 +197,12 @@ def build_actual_triple_variants(rdf, base_uri: str, blank_subject: bool = False
     p = clean_entry(rdf.p)
     o = clean_entry(rdf.o)
     g = clean_entry(rdf.g)
+    datatype = ""
+    language = ""
+    if "^^" in rdf.o:
+        datatype = clean_entry(rdf.o.split("^^", 1)[1])
+    elif "@" in rdf.o:
+        language = rdf.o.rsplit("@", 1)[1]
 
     subject_variants = rdf_term_variants(rdf.s, s, base_uri)
     if blank_subject and isBlanknode(rdf.s):
@@ -203,22 +211,34 @@ def build_actual_triple_variants(rdf, base_uri: str, blank_subject: bool = False
     predicate_variants = rdf_term_variants(rdf.p, p, base_uri)
     object_variants = rdf_term_variants(rdf.o, o, base_uri)
     graph_variants = rdf_term_variants(rdf.g, g, base_uri) if rdf.g != "" else [g]
+    datatype_variants = rdf_term_variants(
+        f"<{datatype}>", datatype, base_uri
+    ) if datatype != "" else [""]
+    language_variants = [language]
 
     return {
-        f"{subject}|{predicate}|{obj}|{graph}"
-        for subject, predicate, obj, graph in product(
+        f"{subject}|{predicate}|{obj}|{graph}|{dt}|{lang}"
+        for subject, predicate, obj, graph, dt, lang in product(
             subject_variants,
             predicate_variants,
             object_variants,
             graph_variants,
+            datatype_variants,
+            language_variants,
         )
     }
 
 
 def build_canonical_actual_triple(rdf) -> str:
+    datatype = ""
+    language = ""
+    if "^^" in rdf.o:
+        datatype = clean_entry(rdf.o.split("^^", 1)[1])
+    elif "@" in rdf.o:
+        language = rdf.o.rsplit("@", 1)[1]
     return (
         f"{clean_entry(rdf.s)}|{clean_entry(rdf.p)}|"
-        f"{clean_entry(rdf.o)}|{clean_entry(rdf.g)}"
+        f"{clean_entry(rdf.o)}|{clean_entry(rdf.g)}|{datatype}|{language}"
     )
 
 # Check if entry is an URI
@@ -274,10 +294,15 @@ def extract_information(graph: Graph) -> tuple[str,str,str,str,str,str,str,str]:
     pred, predicate_type = getPredicate(graph)
     # Get object
     obj, object_type = getObject(graph)
+    data_type_map, data_type_type = getDatatype(graph)
+    language_map, language_type = getLanguage(graph)
     # Get graph
     gra, graph_type = getGraph(graph)
 
-    return (new_path, sub, subject_type, pred, predicate_type, obj, object_type, gra, graph_type, "")
+    return (
+        new_path, sub, subject_type, pred, predicate_type, obj, object_type,
+        gra, graph_type, "", data_type_map, data_type_type, language_map, language_type
+    )
 
 def get_parent(g: Graph) -> str:
     for s,p,o in g:
@@ -299,12 +324,20 @@ def extract_information_join(graph1: Graph, graph2: Graph) -> tuple[str,str,str,
     pred, predicate_type = getPredicate(graph1)
     # Get object
     obj, object_type = getSubject(graph2)
+    data_type_map = ""
+    data_type_type = ""
+    language_map = ""
+    language_type = ""
     # Get graph
     gra, graph_type = getGraph(graph1)
     child = get_child(graph1)
     parent = get_parent(graph1)
 
-    return (new_path, sub, subject_type, pred, predicate_type, obj, object_type, gra, graph_type, new_path2, child, parent)
+    return (
+        new_path, sub, subject_type, pred, predicate_type, obj, object_type, gra,
+        graph_type, new_path2, child, parent, data_type_map, data_type_type,
+        language_map, language_type
+    )
 
 def isDuplicateGraph(graph: Graph, all_graphs: list[Graph]) -> bool:
     reference_info = extract_information(graph)
@@ -343,6 +376,10 @@ def mask_string(input_data: str, row: dict[str, str]) -> str:
 def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.DataFrame()) -> set[str]:
     # Generate data
     generated_triples = set()
+    data_type_map = info[12] if info[9] != "" else info[10]
+    data_type_type = info[13] if info[9] != "" else info[11]
+    language_map = info[14] if info[9] != "" else info[12]
+    language_type = info[15] if info[9] != "" else info[13]
 
     ### With Join ###
     if info[9] != "":
@@ -463,6 +500,24 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 o = o.replace("abb_____", "\\}")
                 o = o.replace("abbb______", "\\")
                 
+                datatype = ""
+                if data_type_type == "constant":
+                    datatype = data_type_map
+                elif data_type_type == "reference":
+                    key = data_type_map.replace(" ", "a___").replace("{", "ab____").replace("}", "abb_____").replace("\\", "abbb______")
+                    datatype = row[key]
+                elif data_type_type == "template":
+                    matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', data_type_map)
+                    datatype = data_type_map
+                    for match in matches:
+                        match_org = match
+                        match = match.replace(" ", "a___").replace("{", "ab____").replace("}", "abb_____").replace("\\", "abbb______")
+                        datatype = datatype.replace("{"+match_org+"}", row[match])
+
+                language = ""
+                if language_type == "constant":
+                    language = language_map
+
                 # Handle graph
                 if info[8] == "constant":
                     g = info[7]
@@ -492,7 +547,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
                 g = g.replace(r"\\{", "{")
                 g = g.replace(r"\\}", "}")
 
-                generated_triples.add(f"{s}|{p}|{o}|{g}")
+                generated_triples.add(f"{s}|{p}|{o}|{g}|{datatype}|{language}")
             except KeyError:
                 pass
         return generated_triples 
@@ -590,6 +645,24 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             o = o.replace(r"\\{", "{")
             o = o.replace(r"\\}", "}")
 
+            datatype = ""
+            if data_type_type == "constant":
+                datatype = data_type_map
+            elif data_type_type == "reference":
+                key = data_type_map.replace(" ", "a___").replace("{", "ab____").replace("}", "abb_____").replace("\\", "abbb______")
+                datatype = row[key]
+            elif data_type_type == "template":
+                matches = re.findall(r'(?<!\\)\{(.*?)(?<!\\)\}', data_type_map)
+                datatype = data_type_map
+                for match in matches:
+                    match_org = match
+                    match = match.replace(" ", "a___").replace("{", "ab____").replace("}", "abb_____").replace("\\", "abbb______")
+                    datatype = datatype.replace("{"+match_org+"}", row[match])
+
+            language = ""
+            if language_type == "constant":
+                language = language_map
+
             if info[8] == "constant":
                 g = info[7]
             elif info[8] == "reference":
@@ -618,7 +691,7 @@ def generate_expected_triple(data: pd.DataFrame, info, data2: pd.DataFrame = pd.
             g = g.replace(r"\\{", "{")
             g = g.replace(r"\\}", "}")
 
-            generated_triples.add(f"{s}|{p}|{o}|{g}")
+            generated_triples.add(f"{s}|{p}|{o}|{g}|{datatype}|{language}")
         except KeyError:
             pass
 
