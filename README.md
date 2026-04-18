@@ -1,6 +1,6 @@
 # ReMap: RML Mapping Reverse Engineering
 
-ReMap reverse engineers an RML mapping document from CSV source data and an RDF output graph. The generated mapping is functionally equivalent to the original unknown RML mapping, even if it uses different RML constructs internally.
+ReMap reverse engineers an RML mapping document from CSV, JSON, or XML source data and an RDF output graph. The generated mapping is functionally equivalent to the original unknown RML mapping, even if it uses different RML constructs internally.
 
 The project now ships as an installable Python package with:
 
@@ -68,7 +68,7 @@ mapping_ttl = generate_rml_from_file(
 print(mapping_ttl)
 ```
 
-Generate a mapping from in-memory RDF and CSV content:
+Generate a mapping from in-memory RDF and CSV / JSON / XML content:
 
 ```python
 from remap import generate_rml
@@ -88,6 +88,8 @@ mapping_ttl = generate_rml(
     csv_paths=["sport.csv", "student.csv"],
 )
 ```
+
+XML inputs are detected automatically from the file name or payload and emit `rml:XPath` logical sources with an inferred iterator.
 
 ## Build
 
