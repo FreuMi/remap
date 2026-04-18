@@ -15,6 +15,7 @@ import io
 import csv
 from collections.abc import Mapping
 from itertools import product
+import xml.etree.ElementTree as ET
 
 DEBUG = False
 
@@ -923,16 +924,136 @@ def json_to_dataframe(raw_json_text: str) -> tuple[pd.DataFrame, str]:
     return pd.DataFrame(flattened_records, dtype=str), iterator
 
 
+def is_valid_xml(s: str) -> bool:
+    try:
+        ET.fromstring(s.lstrip())
+        return True
+    except ET.ParseError:
+        return False
+
+
+def singularize_tag(tag: str) -> str:
+    if tag.endswith("ies") and len(tag) > 3:
+        return tag[:-3] + "y"
+    if tag.endswith("ses") and len(tag) > 3:
+        return tag[:-2]
+    if tag.endswith("s") and not tag.endswith("ss") and len(tag) > 1:
+        return tag[:-1]
+    return tag
+
+
+def flatten_xml_element(element: ET.Element, parent_key: str = "") -> dict[str, str]:
+    items = {}
+
+    for attr_name, attr_value in element.attrib.items():
+        key = f"{parent_key}/@{attr_name}" if parent_key else f"@{attr_name}"
+        items[key] = attr_value
+
+    children = list(element)
+    text = (element.text or "").strip()
+    if not children:
+        key = parent_key or element.tag
+        items[key] = text
+        return items
+
+    grouped_children: dict[str, list[ET.Element]] = {}
+    for child in children:
+        grouped_children.setdefault(child.tag, []).append(child)
+
+    if text:
+        key = f"{parent_key}/#text" if parent_key else "#text"
+        items[key] = text
+
+    for child_tag, same_tag_children in grouped_children.items():
+        child_key = f"{parent_key}/{child_tag}" if parent_key else child_tag
+        if len(same_tag_children) == 1:
+            items.update(flatten_xml_element(same_tag_children[0], child_key))
+            continue
+
+        values = []
+        complex_entries = []
+        for child in same_tag_children:
+            if len(list(child)) == 0 and not child.attrib:
+                values.append((child.text or "").strip())
+            else:
+                complex_entries.append(flatten_xml_element(child, child_key))
+        if values:
+            items[child_key] = json.dumps(values, ensure_ascii=False)
+        for idx, entry in enumerate(complex_entries):
+            for entry_key, entry_value in entry.items():
+                items[f"{entry_key}[{idx}]"] = entry_value
+
+    return items
+
+
+def extract_xml_records(raw_xml_text: str) -> tuple[list[dict], str]:
+    root = ET.fromstring(raw_xml_text.lstrip())
+    children = list(root)
+
+    if not children:
+        guessed_child = singularize_tag(root.tag)
+        return [], f"/{root.tag}/{guessed_child}"
+
+    child_tag_counts: dict[str, int] = {}
+    for child in children:
+        child_tag_counts[child.tag] = child_tag_counts.get(child.tag, 0) + 1
+
+    if len(child_tag_counts) == 1:
+        record_tag = next(iter(child_tag_counts))
+        records = [flatten_xml_element(child) for child in children]
+        return records, f"/{root.tag}/{record_tag}"
+
+    repeated_tags = [tag for tag, count in child_tag_counts.items() if count > 1]
+    if len(repeated_tags) == 1:
+        record_tag = repeated_tags[0]
+        records = [flatten_xml_element(child) for child in children if child.tag == record_tag]
+        return records, f"/{root.tag}/{record_tag}"
+
+    return [flatten_xml_element(root)], f"/{root.tag}"
+
+
+def xml_to_dataframe(raw_xml_text: str) -> tuple[pd.DataFrame, str]:
+    records, iterator = extract_xml_records(raw_xml_text)
+    if not records:
+        return pd.DataFrame(), iterator
+    flattened_records = []
+    for record in records:
+        flattened_records.append(
+            {
+                key: "None" if value is None else str(value)
+                for key, value in record.items()
+            }
+        )
+    return pd.DataFrame(flattened_records, dtype=str), iterator
+
+
+def detect_source_format(raw_text: str, source_path: str = "") -> str:
+    suffix = source_path.lower().rsplit(".", 1)[-1] if "." in source_path else ""
+    if suffix == "json":
+        return "json"
+    if suffix == "xml":
+        return "xml"
+    if is_valid_json(raw_text):
+        return "json"
+    if is_valid_xml(raw_text):
+        return "xml"
+    return "csv"
+
+
 def build_empty_mapping(
     source_path: str,
-    is_json_data: bool,
-    json_iterator: str,
+    source_format: str,
+    iterator: str,
     base_uri: str,
 ) -> str:
-    if is_json_data:
+    if source_format == "json":
         subject_map = "$.missing_subject"
         predicate_map = "$.missing_predicate"
         object_map = "$.missing_object"
+    elif source_format == "xml":
+        subject_map = "missing_subject"
+        predicate_map = "missing_predicate"
+        object_map = "missing_object"
     else:
         subject_map = "missing_subject"
         predicate_map = "missing_predicate"
@@ -940,8 +1061,8 @@ def build_empty_mapping(
 
     empty_graph = build_sub_graph(
         source_path,
-        is_json_data,
-        json_iterator,
+        source_format,
+        iterator,
         subject_map,
         "reference",
         "iri",
@@ -1010,20 +1131,24 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
     if len(rdf_data) == 0:
         csv_text = csv_data[0] if len(csv_data) > 0 else ""
         source_path = csv_paths[0] if len(csv_paths) > 0 else "data0"
-        if is_valid_json(csv_text):
-            _, json_iterator = json_to_dataframe(csv_text)
-            return build_empty_mapping(source_path, True, json_iterator, base_uri)
-        return build_empty_mapping(source_path, False, "$", base_uri)
+        source_format = detect_source_format(csv_text, source_path)
+        if source_format == "json":
+            _, iterator = json_to_dataframe(csv_text)
+        elif source_format == "xml":
+            _, iterator = xml_to_dataframe(csv_text)
+        else:
+            iterator = "$"
+        return build_empty_mapping(source_path, source_format, iterator, base_uri)
 
     for i in range(len(csv_data)):
         csv_text = csv_data[i]
-        is_json_data = False
-        json_iterator = "$"
+        source_format = detect_source_format(csv_text, csv_paths[i] if i < len(csv_paths) else "")
+        iterator = "$"
 
-        # Test if json
-        if is_valid_json(csv_text):
-            is_json_data = True
-            data, json_iterator = json_to_dataframe(csv_text)
+        if source_format == "json":
+            data, iterator = json_to_dataframe(csv_text)
+        elif source_format == "xml":
+            data, iterator = xml_to_dataframe(csv_text)
         else:
             data = pd.read_csv(StringIO(csv_text), dtype=str)
 
@@ -1085,9 +1210,9 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                 s_term_map = s_term_map.replace("ab____", "\\{")
                 s_term_map = s_term_map.replace("abb_____", "\\}")
                 s_term_map = s_term_map.replace("abbb______", "\\")
-                if is_json_data and s_term_map_type == "template":
+                if source_format == "json" and s_term_map_type == "template":
                     s_term_map = normalize_json_template_placeholders(s_term_map)
-                if is_json_data:
+                if source_format == "json":
                     s_term_map, s_term_map_type = normalize_escaped_json_iri_reference(
                         s_term_map, s_term_map_type, s_term_type, base_uri
                     )
@@ -1117,7 +1242,7 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                 p_term_map = p_term_map.replace("ab____", "{")
                 p_term_map = p_term_map.replace("abb_____", "}")
                 p_term_map = p_term_map.replace("abbb______", "\\")
-                if is_json_data and p_term_map_type == "template":
+                if source_format == "json" and p_term_map_type == "template":
                     p_term_map = normalize_json_template_placeholders(p_term_map)
 
                 ## Handle object ##
@@ -1145,7 +1270,7 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                 o_term_map = o_term_map.replace("ab____", "\\\\{")
                 o_term_map = o_term_map.replace("abb_____", "\\\\}")
                 o_term_map = o_term_map.replace("abbb______", "\\")
-                if is_json_data and o_term_map_type == "template":
+                if source_format == "json" and o_term_map_type == "template":
                     o_term_map = normalize_json_template_placeholders(o_term_map)
                 o_term_map, o_term_map_type = normalize_literal_term_map(
                     o_term_map, o_term_map_type, o_term_type
@@ -1181,7 +1306,7 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                 g_term_map = g_term_map.replace("ab____", "{")
                 g_term_map = g_term_map.replace("abb_____", "}")
                 g_term_map = g_term_map.replace("abbb______", "\\")
-                if is_json_data and g_term_map_type == "template":
+                if source_format == "json" and g_term_map_type == "template":
                     g_term_map = normalize_json_template_placeholders(g_term_map)
 
                 ## Handle datatype ##
@@ -1217,7 +1342,7 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                     data_type_term_map = data_type_term_map.replace("ab____", "{")
                     data_type_term_map = data_type_term_map.replace("abb_____", "}")
                     data_type_term_map = data_type_term_map.replace("abbb______", "\\")
-                    if is_json_data and data_type_term_map_type == "template":
+                    if source_format == "json" and data_type_term_map_type == "template":
                         data_type_term_map = normalize_json_template_placeholders(data_type_term_map)
 
                 ## Hanlde Language Tag ##
@@ -1251,11 +1376,11 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                     lang_tag_term_map = lang_tag_term_map.replace("ab____", "{")
                     lang_tag_term_map = lang_tag_term_map.replace("abb_____", "}")
                     lang_tag_term_map = lang_tag_term_map.replace("abbb______", "\\")
-                    if is_json_data and lang_tag_term_map_type == "template":
+                    if source_format == "json" and lang_tag_term_map_type == "template":
                         lang_tag_term_map = normalize_json_template_placeholders(lang_tag_term_map)
 
                 ## Build rml graph ##
-                tmp_rml_sub_graph = build_sub_graph(csv_path, is_json_data, json_iterator, s_term_map, s_term_map_type, s_term_type,\
+                tmp_rml_sub_graph = build_sub_graph(csv_path, source_format, iterator, s_term_map, s_term_map_type, s_term_type,\
                                                             p_term_map, p_term_map_type, p_term_type, \
                                                             o_term_map, o_term_map_type, o_term_type, \
                                                             g_term_type, g_term_map, g_term_map_type, \

@@ -23,7 +23,7 @@ def init_template(g: Graph) -> str:
 
 # Add logical source triples
 def add_logical_source(
-    g: Graph, tm_name: str, path: str, is_json_data: bool, iterator: str = "$"
+    g: Graph, tm_name: str, path: str, source_format: str, iterator: str = "$"
 ) -> None:
     # Generate blank nodes
     bn1 = BNode()
@@ -32,11 +32,17 @@ def add_logical_source(
     # Add to graph
     g.add((URIRef(tm_name), LOGICAL_SOURCE, bn1))
     g.add((bn1, RDF_TYPE, LOGICAL_SOURCE_CLASS))
-    if not is_json_data:
-        g.add((bn1, REF_FORMULATION, CSV_FORMAT)) # CSV
-    else:
-        g.add((bn1, REF_FORMULATION, JSON_FORMAT)) # JSON
+    if source_format == "csv":
+        g.add((bn1, REF_FORMULATION, CSV_FORMAT))
+    elif source_format == "json":
+        g.add((bn1, REF_FORMULATION, JSON_FORMAT))
         g.add((bn1, ITERATOR, Literal(iterator)))
+    elif source_format == "xml":
+        g.add((bn1, REF_FORMULATION, XML_FORMAT))
+        g.add((bn1, ITERATOR, Literal(iterator)))
+    else:
+        print("Error: Unsupported source format! Found", source_format)
+        sys.exit(1)
 
     g.add((bn1, SOURCE, bn2))
     g.add((bn2, RDF_TYPE, PATH_SOURCE_CLASS))
@@ -101,7 +107,7 @@ def add_subject(g: Graph, tm_name: str, term_map: str, term_map_type: str, term_
         
 # Add a POM
 def add_predicate_object_map(g: Graph, tm_name: str,\
-                            is_json_data: bool,\
+                            source_format: str,\
                             p_term_map: str, p_term_map_type: str, p_term_type: str,\
                             o_term_map: str, o_term_map_type: str, o_term_type: str, \
                             data_type_term_type: str, data_type_term_map: str, data_type_term_map_type: str,\
@@ -210,7 +216,7 @@ def add_predicate_object_map_join(g: Graph, tm_name: str,\
     # Add parent tm
     g.add((bn3, PARENT_TM, URIRef(tm2)))
 
-def build_sub_graph(file_path_csv: str, is_json_data: bool, json_iterator: str, s_term_map: str, s_term_map_type: str, s_term_type: str,\
+def build_sub_graph(file_path_csv: str, source_format: str, iterator: str, s_term_map: str, s_term_map_type: str, s_term_type: str,\
                     p_term_map: str, p_term_map_type: str, p_term_type: str,\
                     o_term_map: str, o_term_map_type: str, o_term_type: str,\
                     g_term_type: str, g_term_map: str, g_term_map_type: str,\
@@ -222,9 +228,9 @@ def build_sub_graph(file_path_csv: str, is_json_data: bool, json_iterator: str, 
     rml_sub_graph.bind("rml", RML)
     
     tm = init_template(rml_sub_graph)
-    add_logical_source(rml_sub_graph, tm, file_path_csv, is_json_data, json_iterator)
+    add_logical_source(rml_sub_graph, tm, file_path_csv, source_format, iterator)
     add_subject(rml_sub_graph, tm, s_term_map, s_term_map_type, s_term_type, g_term_type, g_term_map, g_term_map_type)
-    add_predicate_object_map(rml_sub_graph, tm, is_json_data, p_term_map, p_term_map_type, p_term_type,\
+    add_predicate_object_map(rml_sub_graph, tm, source_format, p_term_map, p_term_map_type, p_term_type,\
                             o_term_map, o_term_map_type, o_term_type,\
                             data_type_term_type, data_type_term_map, data_type_term_map_type,\
                             lang_tag_term_type, lang_tag_term_map, lang_tag_term_map_type)
@@ -298,11 +304,11 @@ def build_sub_graph_join(g: Graph, g2: Graph, data=None, data2=None) -> Graph:
     rml_sub_graph2 = Graph()
     RML = Namespace("http://w3id.org/rml/")
     rml_sub_graph2.bind("rml", RML)
-    file_path_csv2, is_json_data2, json_iterator2 = getLogicalSourceDetails(g2)
+    file_path_csv2, source_format2, json_iterator2 = getLogicalSourceDetails(g2)
     parent_subject_map, parent_subject_map_type = getSubject(g2)
     parent_subject_type = get_term_type_of_graph(g2, "s")
     tm2 = init_template(rml_sub_graph2)
-    add_logical_source(rml_sub_graph2, tm2, file_path_csv2, is_json_data2, json_iterator2)
+    add_logical_source(rml_sub_graph2, tm2, file_path_csv2, source_format2, json_iterator2)
     add_subject(
         rml_sub_graph2,
         tm2,
@@ -317,7 +323,7 @@ def build_sub_graph_join(g: Graph, g2: Graph, data=None, data2=None) -> Graph:
     # Generate first part
     rml_sub_graph = Graph()
 
-    file_path_csv, is_json_data, json_iterator = getLogicalSourceDetails(g)
+    file_path_csv, source_format, json_iterator = getLogicalSourceDetails(g)
 
     s_term_map, s_term_map_type = getSubject(g)
     s_term_type = get_term_type_of_graph(g, "s")
@@ -339,7 +345,7 @@ def build_sub_graph_join(g: Graph, g2: Graph, data=None, data2=None) -> Graph:
         return (Graph(), Graph())
 
     tm = init_template(rml_sub_graph)
-    add_logical_source(rml_sub_graph, tm, file_path_csv, is_json_data, json_iterator)
+    add_logical_source(rml_sub_graph, tm, file_path_csv, source_format, json_iterator)
     add_subject(rml_sub_graph, tm, s_term_map, s_term_map_type, s_term_type, g_term_type, g_term_map, g_term_map_type)
     add_predicate_object_map_join(rml_sub_graph, tm, p_term_map, p_term_map_type, tm2, parent, child )
 

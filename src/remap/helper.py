@@ -7,10 +7,10 @@ def getPath(graph: Graph) -> str:
             return str(o)   
 
 
-def getLogicalSourceDetails(graph: Graph) -> tuple[str, bool, str]:
+def getLogicalSourceDetails(graph: Graph) -> tuple[str, str, str]:
     logical_source = None
     path = ""
-    is_json_data = False
+    source_format = "csv"
     iterator = "$"
 
     for s, p, o in graph:
@@ -27,7 +27,10 @@ def getLogicalSourceDetails(graph: Graph) -> tuple[str, bool, str]:
         if str(s) != logical_source:
             continue
         if str(p) == "http://w3id.org/rml/referenceFormulation":
-            is_json_data = str(o) == "http://w3id.org/rml/JSONPath"
+            if str(o) == "http://w3id.org/rml/JSONPath":
+                source_format = "json"
+            elif str(o) == "http://w3id.org/rml/XPath":
+                source_format = "xml"
         elif str(p) == "http://w3id.org/rml/iterator":
             iterator = str(o)
         elif str(p) == "http://w3id.org/rml/source":
@@ -42,7 +45,7 @@ def getLogicalSourceDetails(graph: Graph) -> tuple[str, bool, str]:
             path = str(o)
             break
 
-    return path, is_json_data, iterator
+    return path, source_format, iterator
 
 def getSubject(graph: Graph) -> tuple[str,str]:
     subjectMap = ""

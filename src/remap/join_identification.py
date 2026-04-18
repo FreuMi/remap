@@ -2,6 +2,7 @@ import pandas as pd
 import json
 from collections.abc import Mapping
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 
 def is_simple_json_key(key: str) -> bool:
@@ -51,6 +52,72 @@ def extract_json_records(raw_json_text: str) -> list[dict]:
     return [{"value": data}]
 
 
+def flatten_xml_element(element: ET.Element, parent_key=""):
+    items = {}
+
+    for attr_name, attr_value in element.attrib.items():
+        key = f"{parent_key}/@{attr_name}" if parent_key else f"@{attr_name}"
+        items[key] = attr_value
+
+    children = list(element)
+    text = (element.text or "").strip()
+    if not children:
+        key = parent_key or element.tag
+        items[key] = text
+        return items
+
+    grouped_children = {}
+    for child in children:
+        grouped_children.setdefault(child.tag, []).append(child)
+
+    if text:
+        key = f"{parent_key}/#text" if parent_key else "#text"
+        items[key] = text
+
+    for child_tag, same_tag_children in grouped_children.items():
+        child_key = f"{parent_key}/{child_tag}" if parent_key else child_tag
+        if len(same_tag_children) == 1:
+            items.update(flatten_xml_element(same_tag_children[0], child_key))
+            continue
+
+        values = []
+        complex_entries = []
+        for child in same_tag_children:
+            if len(list(child)) == 0 and not child.attrib:
+                values.append((child.text or "").strip())
+            else:
+                complex_entries.append(flatten_xml_element(child, child_key))
+        if values:
+            items[child_key] = json.dumps(values, ensure_ascii=False)
+        for idx, entry in enumerate(complex_entries):
+            for entry_key, entry_value in entry.items():
+                items[f"{entry_key}[{idx}]"] = entry_value
+
+    return items
+
+
+def extract_xml_records(raw_xml_text: str) -> list[dict]:
+    root = ET.fromstring(raw_xml_text.lstrip())
+    children = list(root)
+
+    if not children:
+        return []
+
+    child_tag_counts = {}
+    for child in children:
+        child_tag_counts[child.tag] = child_tag_counts.get(child.tag, 0) + 1
+
+    if len(child_tag_counts) == 1:
+        return [flatten_xml_element(child) for child in children]
+
+    repeated_tags = [tag for tag, count in child_tag_counts.items() if count > 1]
+    if len(repeated_tags) == 1:
+        record_tag = repeated_tags[0]
+        return [flatten_xml_element(child) for child in children if child.tag == record_tag]
+
+    return [flatten_xml_element(root)]
+
+
 def sanitize_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [
@@ -79,6 +146,11 @@ def load_dataframe(path: str) -> pd.DataFrame:
         if not flattened_records:
             return pd.DataFrame()
         return sanitize_columns(pd.DataFrame(flattened_records, dtype=str))
+    if file_path.suffix.lower() == ".xml":
+        records = extract_xml_records(file_path.read_text(encoding="utf-8"))
+        if not records:
+            return pd.DataFrame()
+        return sanitize_columns(pd.DataFrame(records, dtype=str))
 
     return sanitize_columns(pd.read_csv(file_path, dtype=str))
 
