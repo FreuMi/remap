@@ -105,7 +105,14 @@ def parse_rdf_as_nt(raw_data: str):
         for line in raw_data.splitlines()
         if line.strip()
     ]
-    if all(len(tokenizer(line)) in {4, 5} for line in line_based):
+    has_turtle_directives = any(
+        line.startswith("@prefix")
+        or line.startswith("@base")
+        or line.upper().startswith("PREFIX ")
+        or line.upper().startswith("BASE ")
+        for line in line_based
+    )
+    if not has_turtle_directives and all(len(tokenizer(line)) in {4, 5} for line in line_based):
         return raw_data
 
     # Preserve original blank node labels when the input is already line-based RDF.
