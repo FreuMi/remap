@@ -251,6 +251,39 @@ def clone_triples_map(src_graph: Graph, tm, dst_graph: Graph):
         dst_graph.add((tm, RML.predicateObjectMap, new_pom))
 
 
+def remove_subtree(graph: Graph, root, visited=None) -> None:
+    if visited is None:
+        visited = set()
+    if root in visited:
+        return
+    visited.add(root)
+
+    if not isinstance(root, BNode):
+        return
+
+    for _, _, child in list(graph.triples((root, None, None))):
+        remove_subtree(graph, child, visited)
+
+    for triple in list(graph.triples((root, None, None))):
+        graph.remove(triple)
+
+
+def deduplicate_predicate_object_maps(graph: Graph, tm) -> None:
+    seen_signatures = set()
+    poms_to_remove = []
+
+    for pom in list(graph.objects(tm, RML.predicateObjectMap)):
+        signature = node_signature(graph, pom)
+        if signature in seen_signatures:
+            poms_to_remove.append(pom)
+            continue
+        seen_signatures.add(signature)
+
+    for pom in poms_to_remove:
+        graph.remove((tm, RML.predicateObjectMap, pom))
+        remove_subtree(graph, pom)
+
+
 def merge_triples_maps(graphs):
     """
     graphs: list of rdflib.Graph, each containing one rml:TriplesMap subgraph
@@ -292,6 +325,8 @@ def merge_triples_maps(graphs):
                 if other_tm == tm or (other_tm, RDF.type, RML.TriplesMap) in merged:
                     continue
                 clone_triples_map(g, other_tm, merged)
+
+        deduplicate_predicate_object_maps(merged, base_tm)
 
         merged_graphs.append(merged)
 
