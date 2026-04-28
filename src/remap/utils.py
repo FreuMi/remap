@@ -10,6 +10,9 @@ class Quad:
     o: str
     g: str
 
+RDFLIB_DEFAULT_GRAPH = "<urn:x-rdflib:default>"
+
+
 def decode_safe_iri(safe_iri: str) -> str:
     # Reverse lookup table for decoding
     decode_map = {
@@ -165,7 +168,8 @@ def parse(ntriple_data: str) -> list[Quad]:
             x = Quad(line_parts[0], line_parts[1], line_parts[2], "")
             rdf_data.append(x)
         elif len(line_parts) == 4:
-            x = Quad(line_parts[0], line_parts[1], line_parts[2], line_parts[3])
+            graph = "" if line_parts[3] == RDFLIB_DEFAULT_GRAPH else line_parts[3]
+            x = Quad(line_parts[0], line_parts[1], line_parts[2], graph)
             rdf_data.append(x)
         else:
             print("Error parsing data. Found:", line_parts)
