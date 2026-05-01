@@ -16,6 +16,7 @@ import csv
 from collections.abc import Mapping
 from itertools import product
 import xml.etree.ElementTree as ET
+from typing import Optional
 
 DEBUG = False
 
@@ -202,7 +203,12 @@ def rdf_term_variants(raw_term: str, cleaned_term: str, base_uri: str) -> list[s
     return variants
 
 
-def build_actual_triple_variants(rdf, base_uri: str, blank_subject: bool = False) -> set[str]:
+def build_actual_triple_variants(
+    rdf,
+    base_uri: str,
+    blank_subject: bool = False,
+    blank_node_templates = None,
+) -> set[str]:
     s = clean_entry(rdf.s)
     p = clean_entry(rdf.p)
     o = clean_entry(rdf.o)
@@ -217,9 +223,13 @@ def build_actual_triple_variants(rdf, base_uri: str, blank_subject: bool = False
     subject_variants = rdf_term_variants(rdf.s, s, base_uri)
     if blank_subject and isBlanknode(rdf.s):
         subject_variants = ["BLANK_NODE"]
+    if blank_node_templates is not None and isBlanknode(rdf.s) and rdf.s in blank_node_templates:
+        subject_variants.append(blank_node_templates[rdf.s][0])
 
     predicate_variants = rdf_term_variants(rdf.p, p, base_uri)
     object_variants = rdf_term_variants(rdf.o, o, base_uri)
+    if blank_node_templates is not None and isBlanknode(rdf.o) and rdf.o in blank_node_templates:
+        object_variants.append(blank_node_templates[rdf.o][0])
     graph_variants = rdf_term_variants(rdf.g, g, base_uri) if rdf.g != "" else [g]
     datatype_variants = rdf_term_variants(
         f"<{datatype}>", datatype, base_uri
@@ -815,6 +825,128 @@ def normalize_escaped_json_iri_reference(
     return f"{base_uri}{{{term_map}}}", "template"
 
 
+def unescape_column_name(name: str) -> str:
+    name = name.replace("a___", " ")
+    name = name.replace("ab____", "{")
+    name = name.replace("abb_____", "}")
+    name = name.replace("abbb______", "\\")
+    return name
+
+
+def blank_node_token(value: str) -> str:
+    value = clean_entry(value)
+    if "#" in value:
+        value = value.rsplit("#", 1)[1]
+    elif "/" in value:
+        value = value.rstrip("/").rsplit("/", 1)[1]
+    value = re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-")
+    return value
+
+
+def find_value_reference(value: str, row: dict[str, str], base_uri: str) -> str:
+    value = clean_entry(value)
+    value = remove_base_uri(value, base_uri)
+
+    for key, source_value in row.items():
+        if source_value == "None":
+            continue
+        if str(source_value) == value:
+            return f"{{{key}}}"
+
+    for key, source_value in row.items():
+        if source_value == "None":
+            continue
+        if str(source_value) != "" and str(source_value) in value:
+            return f"{{{key}}}"
+
+    if value.startswith("http://") or value.startswith("https://"):
+        for key in row:
+            key_token = blank_node_token(unescape_column_name(key))
+            if key_token != "" and key_token in value:
+                return key_token
+
+    return ""
+
+
+def infer_blank_node_templates(
+    rdf_data,
+    row: dict[str, str],
+    base_uri: str,
+) -> dict[str, tuple[str, str]]:
+    blank_nodes = {
+        term
+        for element in rdf_data
+        for term in (element.s, element.o)
+        if isBlanknode(term)
+    }
+    templates: dict[str, tuple[str, str]] = {}
+    resolving: set[str] = set()
+
+    def template_for(blank_node: str) -> str:
+        if blank_node in templates:
+            return templates[blank_node][0]
+        if blank_node in resolving:
+            return blank_node_token(blank_node)
+
+        resolving.add(blank_node)
+        parts = []
+        outgoing = sorted(
+            (element for element in rdf_data if element.s == blank_node),
+            key=lambda element: (element.p, element.o),
+        )
+        for element in outgoing:
+            if isBlanknode(element.o):
+                child_template = template_for(element.o)
+                if child_template != "":
+                    parts.append(child_template)
+                continue
+
+            ref = find_value_reference(element.o, row, base_uri)
+            if ref != "":
+                parts.append(ref)
+                continue
+
+            token = blank_node_token(element.o)
+            if token != "":
+                parts.append(token)
+
+        resolving.remove(blank_node)
+
+        deduped_parts = []
+        for part in parts:
+            if part not in deduped_parts:
+                deduped_parts.append(part)
+
+        if not deduped_parts:
+            deduped_parts.append("node")
+
+        template = "blank-" + "-".join(deduped_parts)
+        templates[blank_node] = (template, "template")
+        return template
+
+    for blank_node in sorted(blank_nodes):
+        template_for(blank_node)
+
+    return templates
+
+
+def materialize_template(term_map: str, row: dict[str, str]) -> str:
+    result = term_map
+    for key, value in row.items():
+        result = result.replace(f"{{{key}}}", value)
+    return result
+
+
+def materialize_blank_node_templates(
+    templates: dict[str, tuple[str, str]],
+    row: dict[str, str],
+) -> dict[str, tuple[str, str]]:
+    return {
+        blank_node: (materialize_template(term_map, row), term_map_type)
+        for blank_node, (term_map, term_map_type) in templates.items()
+    }
+
+
 def collapse_expressionless_blanknode_subjects(graphs: list[Graph]) -> None:
     graphs_by_source = {}
     RML = Namespace("http://w3id.org/rml/")
@@ -881,30 +1013,87 @@ def append_json_path_segment(parent_key: str, key: str) -> str:
     return f"{parent_key}['{escaped_key}']"
 
 
-def extract_json_records(raw_json_text: str) -> tuple[list[dict], str]:
+def collect_json_scalar_values(value) -> set[str]:
+    if isinstance(value, Mapping):
+        values = set()
+        for child in value.values():
+            values.update(collect_json_scalar_values(child))
+        return values
+    if isinstance(value, list):
+        values = set()
+        for child in value:
+            values.update(collect_json_scalar_values(child))
+        return values
+    if value is None:
+        return set()
+    return {str(value)}
+
+
+def rdf_sample_values(rdf_data) -> set[str]:
+    values = set()
+    for element in rdf_data:
+        for term in (element.s, element.p, element.o, element.g):
+            if term == "":
+                continue
+            cleaned = clean_entry(term)
+            if "^^" in cleaned:
+                cleaned = cleaned.split("^^", 1)[0]
+            elif "@" in cleaned and not cleaned.startswith("http://") and not cleaned.startswith("https://"):
+                cleaned = cleaned.split("@", 1)[0]
+            values.add(cleaned)
+    return values
+
+
+def json_repeated_record_candidate(data, rdf_data=None) -> tuple[str, list] | None:
+    list_entries = [
+        (key, value)
+        for key, value in data.items()
+        if isinstance(value, list)
+    ]
+    if len(list_entries) != 1 or not all(
+        isinstance(entry, Mapping) for entry in list_entries[0][1]
+    ):
+        return None
+
+    if rdf_data is None:
+        return list_entries[0]
+
+    key, value = list_entries[0]
+    sample_values = rdf_sample_values(rdf_data)
+    repeated_values = collect_json_scalar_values(value)
+    root_values = collect_json_scalar_values(
+        {
+            root_key: child
+            for root_key, child in data.items()
+            if root_key != key and not isinstance(child, list)
+        }
+    )
+
+    if sample_values & repeated_values:
+        return key, value
+    if sample_values & root_values:
+        return None
+    return key, value
+
+
+def extract_json_records(raw_json_text: str, rdf_data=None) -> tuple[list[dict], str]:
     data = json.loads(raw_json_text)
 
     if isinstance(data, list):
         return data, "$[*]"
 
     if isinstance(data, dict):
-        list_entries = [
-            (key, value)
-            for key, value in data.items()
-            if isinstance(value, list)
-        ]
-        if len(list_entries) == 1 and all(
-            isinstance(entry, Mapping) for entry in list_entries[0][1]
-        ):
-            key, value = list_entries[0]
+        repeated_record = json_repeated_record_candidate(data, rdf_data)
+        if repeated_record is not None:
+            key, value = repeated_record
             return value, f"$.{key}[*]"
         return [data], "$"
 
     return [{"value": data}], "$"
 
 
-def json_to_dataframe(raw_json_text: str) -> tuple[pd.DataFrame, str]:
-    records, iterator = extract_json_records(raw_json_text)
+def json_to_dataframe(raw_json_text: str, rdf_data=None) -> tuple[pd.DataFrame, str]:
+    records, iterator = extract_json_records(raw_json_text, rdf_data)
     flattened_records = []
     for record in records:
         if isinstance(record, Mapping):
@@ -988,8 +1177,23 @@ def flatten_xml_element(element: ET.Element, parent_key: str = "") -> dict[str, 
 
 def extract_xml_records(raw_xml_text: str) -> tuple[list[dict], str]:
     root = ET.fromstring(raw_xml_text.lstrip())
-    children = list(root)
+    candidate = find_repeated_xml_record_candidate(root)
+    if candidate is not None:
+        record_path, record_elements = candidate
+        context_values = collect_xml_scalar_context(root)
+        records = []
+        for record_element in record_elements:
+            record = flatten_xml_element(record_element)
+            for value_path, value in context_values:
+                if is_descendant_xml_path(value_path, record_path):
+                    continue
+                reference = xml_relative_reference(record_path, value_path)
+                if reference and reference not in record:
+                    record[reference] = value
+            records.append(record)
+        return records, "/" + "/".join(record_path)
 
+    children = list(root)
     if not children:
         guessed_child = singularize_tag(root.tag)
         return [], f"/{root.tag}/{guessed_child}"
@@ -1012,6 +1216,72 @@ def extract_xml_records(raw_xml_text: str) -> tuple[list[dict], str]:
     return [flatten_xml_element(root)], f"/{root.tag}"
 
 
+def find_repeated_xml_record_candidate(
+    root: ET.Element,
+) -> Optional[tuple[list[str], list[ET.Element]]]:
+    candidates = []
+
+    def visit(element: ET.Element, path: list[str]) -> None:
+        grouped_children: dict[str, list[ET.Element]] = {}
+        for child in list(element):
+            grouped_children.setdefault(child.tag, []).append(child)
+
+        for child_tag, same_tag_children in grouped_children.items():
+            child_path = [*path, child_tag]
+            complex_children = [
+                child for child in same_tag_children if list(child) or child.attrib
+            ]
+            if len(same_tag_children) > 1 and len(complex_children) == len(same_tag_children):
+                candidates.append((child_path, same_tag_children))
+            for child in same_tag_children:
+                visit(child, child_path)
+
+    visit(root, [root.tag])
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda entry: (len(entry[0]), len(entry[1])), reverse=True)
+    return candidates[0]
+
+
+def collect_xml_scalar_context(root: ET.Element) -> list[tuple[list[str], str]]:
+    values = []
+
+    def visit(element: ET.Element, path: list[str]) -> None:
+        for attr_name, attr_value in element.attrib.items():
+            values.append(([*path, f"@{attr_name}"], attr_value))
+
+        children = list(element)
+        text = (element.text or "").strip()
+        if text:
+            if children:
+                values.append(([*path, "#text"], text))
+            else:
+                values.append((path, text))
+
+        for child in children:
+            visit(child, [*path, child.tag])
+
+    visit(root, [root.tag])
+    return values
+
+
+def is_descendant_xml_path(path: list[str], ancestor_path: list[str]) -> bool:
+    return len(path) > len(ancestor_path) and path[: len(ancestor_path)] == ancestor_path
+
+
+def xml_relative_reference(record_path: list[str], value_path: list[str]) -> str:
+    common_len = 0
+    for record_part, value_part in zip(record_path, value_path):
+        if record_part != value_part:
+            break
+        common_len += 1
+
+    up_segments = [".."] * (len(record_path) - common_len)
+    down_segments = value_path[common_len:]
+    return "/".join([*up_segments, *down_segments])
+
+
 def xml_to_dataframe(raw_xml_text: str) -> tuple[pd.DataFrame, str]:
     records, iterator = extract_xml_records(raw_xml_text)
     if not records:
@@ -1029,13 +1299,19 @@ def xml_to_dataframe(raw_xml_text: str) -> tuple[pd.DataFrame, str]:
 
 def detect_source_format(raw_text: str, source_path: str = "") -> str:
     suffix = source_path.lower().rsplit(".", 1)[-1] if "." in source_path else ""
+    content_is_json = is_valid_json(raw_text)
+    content_is_xml = is_valid_xml(raw_text)
+    if suffix == "json" and content_is_json:
+        return "json"
+    if suffix == "xml" and content_is_xml:
+        return "xml"
+    if content_is_json:
+        return "json"
+    if content_is_xml:
+        return "xml"
     if suffix == "json":
         return "json"
     if suffix == "xml":
-        return "xml"
-    if is_valid_json(raw_text):
-        return "json"
-    if is_valid_xml(raw_text):
         return "xml"
     return "csv"
 
@@ -1118,6 +1394,7 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
 
     rml_sub_graphs = []
     stored_data = {}
+    stored_source_formats = {}
 
     if csv_paths is None:
         csv_paths = []
@@ -1133,7 +1410,7 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
         source_path = csv_paths[0] if len(csv_paths) > 0 else "data0"
         source_format = detect_source_format(csv_text, source_path)
         if source_format == "json":
-            _, iterator = json_to_dataframe(csv_text)
+            _, iterator = json_to_dataframe(csv_text, rdf_data)
         elif source_format == "xml":
             _, iterator = xml_to_dataframe(csv_text)
         else:
@@ -1146,7 +1423,7 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
         iterator = "$"
 
         if source_format == "json":
-            data, iterator = json_to_dataframe(csv_text)
+            data, iterator = json_to_dataframe(csv_text, rdf_data)
         elif source_format == "xml":
             data, iterator = xml_to_dataframe(csv_text)
         else:
@@ -1175,6 +1452,7 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
             row = row.to_dict()
             # Sort so longer ones are first
             row = dict(sorted(row.items(), key=lambda item: len(item[1]), reverse=True))
+            blank_node_templates = infer_blank_node_templates(rdf_data, row, base_uri)
             # Iterate over the graph
             for element in rdf_data:
                 # Access data
@@ -1188,34 +1466,37 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                 s_term_map = ""
                 s_term_map_type = ""
 
-                # clean s value
-                s = clean_entry(s)
-                if s_term_type == "iri":
-                    s = remove_base_uri(s, base_uri)
+                if isBlanknode(element.s) and element.s in blank_node_templates:
+                    s_term_map, s_term_map_type = blank_node_templates[element.s]
+                else:
+                    # clean s value
+                    s = clean_entry(s)
+                    if s_term_type == "iri":
+                        s = remove_base_uri(s, base_uri)
 
-                # Iterate over all elements in the row and detect type
-                s_term_map = s
-                for key, value in row.items():
-                    term_map, term_map_type = get_term_map_type(s_term_map, key, value, base_uri)
-                    if s_term_map_type == "":
-                        s_term_map = term_map
-                        s_term_map_type = term_map_type
-                    elif term_map_type != "constant":
-                        s_term_map = term_map
-                        s_term_map_type = term_map_type
-                s_term_map = mask_string(s_term_map, row)
+                    # Iterate over all elements in the row and detect type
+                    s_term_map = s
+                    for key, value in row.items():
+                        term_map, term_map_type = get_term_map_type(s_term_map, key, value, base_uri)
+                        if s_term_map_type == "":
+                            s_term_map = term_map
+                            s_term_map_type = term_map_type
+                        elif term_map_type != "constant":
+                            s_term_map = term_map
+                            s_term_map_type = term_map_type
+                    s_term_map = mask_string(s_term_map, row)
 
-                # Rename inserted values from pandas headline
-                s_term_map = s_term_map.replace("a___", " ")
-                s_term_map = s_term_map.replace("ab____", "\\{")
-                s_term_map = s_term_map.replace("abb_____", "\\}")
-                s_term_map = s_term_map.replace("abbb______", "\\")
-                if source_format == "json" and s_term_map_type == "template":
-                    s_term_map = normalize_json_template_placeholders(s_term_map)
-                if source_format == "json":
-                    s_term_map, s_term_map_type = normalize_escaped_json_iri_reference(
-                        s_term_map, s_term_map_type, s_term_type, base_uri
-                    )
+                    # Rename inserted values from pandas headline
+                    s_term_map = s_term_map.replace("a___", " ")
+                    s_term_map = s_term_map.replace("ab____", "\\{")
+                    s_term_map = s_term_map.replace("abb_____", "\\}")
+                    s_term_map = s_term_map.replace("abbb______", "\\")
+                    if source_format == "json" and s_term_map_type == "template":
+                        s_term_map = normalize_json_template_placeholders(s_term_map)
+                    if source_format == "json":
+                        s_term_map, s_term_map_type = normalize_escaped_json_iri_reference(
+                            s_term_map, s_term_map_type, s_term_type, base_uri
+                        )
 
                 ## Handle predicate ##
                 p_term_type = get_term_type(p)
@@ -1250,31 +1531,34 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
                 o_term_map = ""
                 o_term_map_type = ""
 
-                # clean o value
-                o = clean_entry(o)
-                if o_term_type == "iri":
-                    o = remove_base_uri(o, base_uri)
-                o_term_map = o
-                for key, value in row.items():
-                    term_map, term_map_type = get_term_map_type(o_term_map, key, value, base_uri)
-                    if o_term_map_type == "":
-                        o_term_map = term_map
-                        o_term_map_type = term_map_type
-                    elif term_map_type != "constant":
-                        o_term_map = term_map
-                        o_term_map_type = term_map_type
-                # Mask string
-                o_term_map = mask_string(o_term_map, row)
-                # Rename inserted values from pandas headline
-                o_term_map = o_term_map.replace("a___", " ")
-                o_term_map = o_term_map.replace("ab____", "\\\\{")
-                o_term_map = o_term_map.replace("abb_____", "\\\\}")
-                o_term_map = o_term_map.replace("abbb______", "\\")
-                if source_format == "json" and o_term_map_type == "template":
-                    o_term_map = normalize_json_template_placeholders(o_term_map)
-                o_term_map, o_term_map_type = normalize_literal_term_map(
-                    o_term_map, o_term_map_type, o_term_type
-                )
+                if isBlanknode(element.o) and element.o in blank_node_templates:
+                    o_term_map, o_term_map_type = blank_node_templates[element.o]
+                else:
+                    # clean o value
+                    o = clean_entry(o)
+                    if o_term_type == "iri":
+                        o = remove_base_uri(o, base_uri)
+                    o_term_map = o
+                    for key, value in row.items():
+                        term_map, term_map_type = get_term_map_type(o_term_map, key, value, base_uri)
+                        if o_term_map_type == "":
+                            o_term_map = term_map
+                            o_term_map_type = term_map_type
+                        elif term_map_type != "constant":
+                            o_term_map = term_map
+                            o_term_map_type = term_map_type
+                    # Mask string
+                    o_term_map = mask_string(o_term_map, row)
+                    # Rename inserted values from pandas headline
+                    o_term_map = o_term_map.replace("a___", " ")
+                    o_term_map = o_term_map.replace("ab____", "\\\\{")
+                    o_term_map = o_term_map.replace("abb_____", "\\\\}")
+                    o_term_map = o_term_map.replace("abbb______", "\\")
+                    if source_format == "json" and o_term_map_type == "template":
+                        o_term_map = normalize_json_template_placeholders(o_term_map)
+                    o_term_map, o_term_map_type = normalize_literal_term_map(
+                        o_term_map, o_term_map_type, o_term_type
+                    )
 
                 ## Handle graph ##
                 g_term_type = "iri"
@@ -1391,6 +1675,7 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
             
         # Store data
         stored_data[csv_path] = data
+        stored_source_formats[csv_path] = source_format
 
         ### FILTER ###
         # Extract possible triples
@@ -1528,6 +1813,29 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
     for rdf in rdf_data:
         variants = build_actual_triple_variants(rdf, base_uri)
         blank_variants = build_actual_triple_variants(rdf, base_uri, blank_subject=True)
+        for data in stored_data.values():
+            for _, row in data.iterrows():
+                row = row.to_dict()
+                row = dict(sorted(row.items(), key=lambda item: len(item[1]), reverse=True))
+                inferred_blank_nodes = materialize_blank_node_templates(
+                    infer_blank_node_templates(rdf_data, row, base_uri),
+                    row,
+                )
+                variants.update(
+                    build_actual_triple_variants(
+                        rdf,
+                        base_uri,
+                        blank_node_templates=inferred_blank_nodes,
+                    )
+                )
+                blank_variants.update(
+                    build_actual_triple_variants(
+                        rdf,
+                        base_uri,
+                        blank_subject=True,
+                        blank_node_templates=inferred_blank_nodes,
+                    )
+                )
         actual_triples.update(variants)
         actual_triples_blank_subject.update(blank_variants)
         actual_triple_records.append(
@@ -1634,7 +1942,9 @@ def generate_rml(raw_rdf_data: str, csv_data, base_uri: str = "http://example.co
             if entry in target_triples:
                 cnt_found += 1
 
-        if len(res) == cnt_found:
+        if len(res) == cnt_found or (
+            stored_source_formats.get(info[0]) == "xml" and cnt_found > 0
+        ):
             filtered_graphs.append(sub_g)
     # Final result
     rml_sub_graphs = filtered_graphs
